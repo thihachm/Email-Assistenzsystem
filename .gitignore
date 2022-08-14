@@ -1,7 +1,6 @@
 Helper/Sueddeutsche Zeitung Random Artikel/scraper/scrapes
 
-
-
+node_modules/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
