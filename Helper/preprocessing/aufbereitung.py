@@ -34,24 +34,18 @@ keywords_en = ["at","after","before","between","by","during",
                "minute","hours","hour","days","day"]
 
 def preprocessSentence(sentence):
-    
     words = '\\b|\\b'.join(keywords+monate+wochentage)
-    print(words)
-            
     return re.search(r"(\\b%s\\b)" % words, sentence, re.IGNORECASE)
 
 
 def filterKeywordSentences(sentence):
-    
     words = '\\b|\\b'.join(keywords+monate+wochentage)
-    print(words)
-            
     return re.search(r"(\\b%s\\b)" % words, sentence, re.IGNORECASE)
             
 def loadArticles():
     # path to data of newspaper
     path = os.path.join(file_root, data_root, "de","sueddeutsche")
-    #walk all files inside folder
+    # walk all files inside folder
     for (dirpath, dirnames, filenames) in os.walk(path):
         for name in filenames:
             data = {}
@@ -65,14 +59,14 @@ def loadArticles():
             with open(os.path.join(path,"sentencesplitted_" + name[0:-5]+'.txt'), 'w', encoding='utf-8') as output:
                 # split sentences for every article in data object
                 for i in data:
-                    #split text
+                    # split text
                     sentences = re.split('(?<!(\d))[.]', i['content'])
                     for index, sentence in enumerate(sentences):
                         if sentence != None:
-                            #write new file for comparisen
+                            # write new file for comparisen
                             output.write(sentence)
                             output.write('\n')
-                            #filter sentences for keywords
+                            # filter sentences for keywords
                             if filterKeywordSentences(sentence):
                                 filtered_sentences.append(sentence)
                             
