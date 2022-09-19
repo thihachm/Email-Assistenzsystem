@@ -1,15 +1,145 @@
 {
     "manifest_version": 2,
-    "name": "Email Assistenzsystem",
+    "name": "event recognition system",
     "version": "0.0.1",
     "description": "",
+    "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self';",
     "permissions": [
         "messagesRead",
-        "accountsRead"
+        "accountsRead",
+        "messagesModify",
+        "downloads",
+        "tabs",
+        "activeTab"
     ],
+    "content_scripts": [{
+        "matches": [
+          "*://*/*"
+        ],
+        "js": [
+          "output/index.js"
+        ],
+        "all_frames": false
+      }],
     "background": {
         "scripts": [
             "background_scripts/index.js"
         ]
+    },
+    "calendar_provider": {
+        "capabilities": {
+            "timezones": {
+                "floating": false,
+                "UTC": false
+            },
+            "attachments": false,
+            "priority": false,
+            "privacy": [
+                "default",
+                "public",
+                "private"
+            ],
+            "categories": {
+                "count": 3
+            },
+            "alarms": {
+                "count": 5,
+                "actions": [
+                    "display",
+                    "email"
+                ]
+            },
+            "tasks": true,
+            "events": true,
+            "remove_modes": [
+                "unsubscribe"
+            ],
+            "requires_network": true,
+            "minimum_refresh_interval": 30
+        }
+    },
+    "experiment_apis": {
+        "calendar_calendars": {
+            "schema": "experiments/calendar/schema/calendar-calendars.json",
+            "parent": {
+                "scopes": [
+                    "addon_parent"
+                ],
+                "script": "experiments/calendar/parent/ext-calendar-calendars.js",
+                "paths": [
+                    [
+                        "calendar",
+                        "calendars"
+                    ]
+                ]
+            }
+        },
+        "calendar_items": {
+            "schema": "experiments/calendar/schema/calendar-items.json",
+            "parent": {
+                "scopes": [
+                    "addon_parent"
+                ],
+                "script": "experiments/calendar/parent/ext-calendar-items.js",
+                "paths": [
+                    [
+                        "calendar",
+                        "items"
+                    ]
+                ]
+            }
+        },
+        "calendar_provider": {
+            "schema": "experiments/calendar/schema/calendar-provider.json",
+            "parent": {
+                "scopes": [
+                    "addon_parent"
+                ],
+                "script": "experiments/calendar/parent/ext-calendar-provider.js",
+                "events": [
+                    "startup"
+                ],
+                "paths": [
+                    [
+                        "calendar",
+                        "provider"
+                    ]
+                ]
+            }
+        },
+        "calendarItemAction": {
+            "schema": "experiments/calendar/schema/calendarItemAction.json",
+            "parent": {
+                "scopes": [
+                    "addon_parent"
+                ],
+                "script": "experiments/calendar/parent/ext-calendarItemAction.js",
+                "events": [
+                    "startup"
+                ],
+                "paths": [
+                    [
+                        "calendarItemAction"
+                    ]
+                ]
+            }
+        },
+        "calendarItemDetails": {
+            "schema": "experiments/calendar/schema/calendarItemDetails.json",
+            "parent": {
+                "scopes": [
+                    "addon_parent"
+                ],
+                "script": "experiments/calendar/parent/ext-calendarItemDetails.js",
+                "events": [
+                    "startup"
+                ],
+                "paths": [
+                    [
+                        "calendarItemDetails"
+                    ]
+                ]
+            }
+        }
     }
 }

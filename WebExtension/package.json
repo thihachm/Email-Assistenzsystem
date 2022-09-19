@@ -11,5 +11,9 @@
     "webpack": "^5.74.0",
     "webpack-cli": "^4.10.0",
     "webpack-webext-plugin": "github:rpl/webpack-webext-plugin"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "^0.4.2",
+    "ics": "^2.40.0"
   }
 }
