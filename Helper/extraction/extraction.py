@@ -10,8 +10,6 @@ wochentag = ["Montag","Dienstag","Mittwoch", "Donnerstag", "Freitag", "Samstag",
 replace_umlaute = ['äüö']
 
 
-
-
 # um 05:00 Uhr am Montagmorgen
 # um 13.50 Uhr
 # um 18:50 Uhr
@@ -43,3 +41,7 @@ replace_umlaute = ['äüö']
 # 2018-01-07                                (?:[0-9][0-9])?[0-9][0-9][-]{1}[0-3][0-9][-]{1}[0-3][0-9]
 # 7. Januar 2018                            [0-3]?[0-9][\.]\s?(Januar|Februar|März|Maerz|April|Mai|Juni|July|August|September|Oktober|November|Dezember)\s?(?:[0-9][0-9])?[0-9][0-9]
 # 7. Jan. 2018
+
+
+
+# 04/25/2001 11:48 AM
