@@ -112,7 +112,7 @@
               sep = "/"
             }
 
-            let folderpath = filename + "ERS_Extension" + sep + "logs"
+            let folderpath = filename + sep + "ERS_Extension" + sep + "logs"
             if (!await IOUtils.exists(folderpath)) {
               await IOUtils.makeDirectory(folderpath);
             }
