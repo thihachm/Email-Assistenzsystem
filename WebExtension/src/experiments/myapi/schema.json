@@ -1,0 +1,75 @@
+[
+  {
+    "namespace": "myapi",
+    "functions": [
+      {
+        "name": "execute",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "executable",
+            "type": "string"
+          },
+          {
+            "name": "arrParams",
+            "optional": true,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      {
+        "name": "writeJson",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "filename",
+            "type": "string"
+          },
+          {
+            "name": "text",
+            "type": "string"
+          }
+        ]
+      },
+      {
+        "name": "writeEvent",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "filename",
+            "type": "string"
+          },
+          {
+            "name": "text",
+            "type": "string"
+          },
+          {
+            "name": "pattern",
+            "type": "string"
+          },
+          {
+            "name": "id",
+            "type": "number"
+          }
+        ]
+      },
+      {
+        "name": "readDB",
+        "type": "function",
+        "async": true,
+        "parameters": [
+          {
+            "name": "filename",
+            "type": "string"
+          }
+        ]
+      }
+    ]
+  }
+]

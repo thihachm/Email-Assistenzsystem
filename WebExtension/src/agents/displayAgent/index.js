@@ -1,6 +1,4 @@
-"use strict";
-
-function createButtonGroup(event) {
+async function createButtonGroup(event) {
   const btWrapper = document.createElement("div");
   btWrapper.className = "buttonGroupWrapper";
 
@@ -8,7 +6,7 @@ function createButtonGroup(event) {
   btCalendar.className = "extensionButton";
   btCalendar.innerText = "Insert into Calendar";
   btCalendar.addEventListener("click", async () => {
-    browser.runtime.sendMessage({ command: "triggercalendarentry", reciever: "OutputAgent", event });
+    await browser.runtime.sendMessage({ command: "triggerCalendarEntry", reciever: "OutputAgent", _sender: "DisplayAgent", data: { event } });
   })
   btWrapper.appendChild(btCalendar);
 
@@ -16,36 +14,32 @@ function createButtonGroup(event) {
   icsdownload.className = "extensionButton";
   icsdownload.innerText = "Download ICS";
   icsdownload.addEventListener("click", async () => {
-    browser.runtime.sendMessage({ command: "triggericsdownload", reciever: "OutputAgent", event });
+    await browser.runtime.sendMessage({ command: "triggerIcsDownload", reciever: "OutputAgent", _sender: "DisplayAgent", data: { event } });
   });
   btWrapper.appendChild(icsdownload);
 
   const approve = document.createElement("a");
   approve.className = "approve";
   approve.addEventListener("click", async () => {
-    browser.runtime.sendMessage({ command: "approveevent", reciever: "OptionsAgent", event });
+    await browser.runtime.sendMessage({ command: "approveEvent", reciever: "OptionsAgent", _sender: "DisplayAgent", data: { event } });
   });
   btWrapper.appendChild(approve);
 
   const reject = document.createElement("a");
   reject.className = "reject";
   reject.addEventListener("click", async () => {
-    browser.runtime.sendMessage({ command: "rejectevent", reciever: "OptionsAgent", event });
+    await browser.runtime.sendMessage({ command: "rejectEvent", reciever: "OptionsAgent", _sender: "DisplayAgent", data: { event } });
   });
   btWrapper.appendChild(reject);
-
 
   return btWrapper
 }
 
 const showNotification = async () => {
-  await browser.runtime.onMessage.addListener((data, sender) => {
-    console.log("Message from the background script:");
-  });
-
   let events = await browser.runtime.sendMessage({
     command: "hasEvent",
     reciever: "EventAgent",
+    _sender: "DisplayAgent"
   });
 
   if (events && events.length > 0) {
@@ -53,27 +47,32 @@ const showNotification = async () => {
     const details = document.createElement("details");
     main.appendChild(details)
     const summary = document.createElement("summary");
-    summary.innerText = events.length + " event found.";
+    summary.innerText = events.length + " event" + (events.length > 1 ? "s" : "") + " found.";
     details.appendChild(summary)
     const content = document.createElement("div");
     content.className = "faq__content";
     details.appendChild(content)
 
-    events.forEach(event => {
+    events.forEach(async (event) => {
       const singleeventwrapper = document.createElement("div");
       singleeventwrapper.className = "singleEventWrapper";
 
       const notificationText = document.createElement("div");
       notificationText.className = "eventNotificationText";
-      notificationText.innerText = "Am " + event[0];
+      notificationText.innerText = "- " + event[0];
       singleeventwrapper.appendChild(notificationText);
 
-      const btGroup = createButtonGroup(event)
+      // const patternText = document.createElement("div");
+      // patternText.className = "patternText";
+      // patternText.innerText = event["pattern"];
+      // singleeventwrapper.appendChild(patternText);
+
+      const btGroup = await createButtonGroup(event)
       singleeventwrapper.appendChild(btGroup);
       content.appendChild(singleeventwrapper)
     });
 
-    // insert it as the very first element in the message
+
     document.body.insertBefore(main, document.body.firstChild);
   }
 

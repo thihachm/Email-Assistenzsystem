@@ -1,4 +1,5 @@
-import { observeMessages, registerAgent } from './observer.js'
+// import { observeMessages, registerAgent } from './observer.js'
+import * as Observer from './observer.js'
 import { EventAgent } from './agents/eventAgent'
 import { OptionsAgent } from './agents/optionsAgent'
 import { OutputAgent } from './agents/outputAgent';
@@ -7,12 +8,13 @@ import { OutputAgent } from './agents/outputAgent';
  * Main
  */
 const init = async () => {
+
   /**
-   * Use the startup phase to tell Thunderbird that it should load
-   * the Display Agent whenever a message is displayed
-   * Required permissions: [messagesModify]
-   * 
-   */
+ * Use the startup phase to tell Thunderbird that it should load
+ * the Display Agent whenever a message is displayed
+ * Required permissions: [messagesModify]
+ * 
+ */
   messenger.messageDisplayScripts.register({
     js: [{ file: "./output/index.js" }],
     css: [{ file: "./output/index.css" }],
@@ -25,12 +27,14 @@ const init = async () => {
    * 👉 There should be only one handler in the background script
    *    for all incoming messages
    */
-  browser.runtime.onMessage.addListener(observeMessages);
+  browser.runtime.onMessage.addListener(Observer.observeMessages);
 
-  registerAgent("EventAgent", EventAgent)
-  registerAgent("OptionsAgent", OptionsAgent)
-  registerAgent("OutputAgent", OutputAgent)
+  Observer.registerAgent("EventAgent", new EventAgent("EventAgent"))
+  Observer.registerAgent("OptionsAgent", new OptionsAgent("OptionsAgent"))
+  Observer.registerAgent("OutputAgent", new OutputAgent("OutputAgent"))
 
+  //Setup output location
+  await Observer.setBasePath()
 };
 
 /**

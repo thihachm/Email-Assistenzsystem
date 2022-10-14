@@ -1,0 +1,112 @@
+*,
+*:before,
+*:after {
+  box-sizing: inherit;
+}
+html {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  background: #eee;
+}
+.form-group {
+  position: relative;
+  display: flex;
+  width: 100%;
+  margin-right: 12px;
+}
+.form-group:last-child {
+  margin-right: 0;
+}
+.form-group > span {
+  text-align: center;
+  padding: 4px 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: #99a3ba;
+  background: #eef4ff;
+  border: 1px solid #cdd9ed;
+  transition: background 0.3s ease, border 0.3s ease, color 0.3s ease;
+}
+.form-group .form-field {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  width: 1%;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.form-group > span,
+.form-group .form-field {
+  white-space: nowrap;
+  display: block;
+}
+.form-group > span:not(:first-child):not(:last-child),
+.form-group .form-field:not(:first-child):not(:last-child) {
+  border-radius: 0;
+}
+.form-group > span:first-child,
+.form-group .form-field:first-child {
+  border-radius: 6px 0 0 6px;
+}
+.form-group > span:last-child,.form-group .form-field:last-child {
+  border-radius: 0 6px 6px 0;
+}
+.form-group > span:not(:first-child),.form-group .form-field:not(:first-child) {
+  margin-left: -1px;
+}
+.form-group:focus-within > span {
+  color: #fff;
+  background: #678efe;
+  border-color: #275efe;
+}
+.form-field {
+  display: block;
+  width: 100%;
+  padding: 4px 8px;
+  line-height: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  border-radius: 6px;
+  color: #99a3ba;
+  border: 1px solid #cdd9ed;
+  background: #eef4ff;
+  transition: border 0.3s ease;
+}
+.form-field::placeholder {
+  color: #cbd1dc;
+}
+.form-field:focus {
+  outline: none;
+  border-color: #275efe;
+}
+.form-group .form-field.matches,
+.form-group > span.matches {
+  border-color: #5eaf2e;
+}
+.form-group > span.matches {
+  color: #fff;
+  background-color: #268a18;
+}
+
+.rulerow {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: 4px;
+}
+
+#basepath {
+  display: flex;
+  flex-direction: row;
+  max-width: 100%;
+  margin-bottom: 6px;
+}
+
+button:hover {
+  cursor: pointer;
+}

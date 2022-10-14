@@ -28,6 +28,10 @@ module.exports = {
                     to: path.resolve(__dirname, "dist", "images"),
                 },
                 {
+                    from: path.resolve(__dirname, "src", "options"),
+                    to: path.resolve(__dirname, "dist", "options"),
+                },
+                {
                     from: path.resolve(__dirname, "src", "experiments"),
                     to: path.resolve(__dirname, "dist", "experiments"),
                 }

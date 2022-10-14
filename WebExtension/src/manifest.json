@@ -1,62 +1,42 @@
 {
     "manifest_version": 2,
-    "name": "event recognition system",
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "hachmeis@uni-hildesheim.de"
+        }
+    },
+    "name": "Event Recognition System",
     "version": "0.0.1",
     "description": "",
-    "content_security_policy": "script-src 'self' 'unsafe-eval'; object-src 'self';",
     "permissions": [
         "messagesRead",
         "accountsRead",
         "messagesModify",
         "downloads",
         "tabs",
-        "activeTab"
+        "activeTab",
+        "storage"
     ],
-    "content_scripts": [{
-        "matches": [
-          "*://*/*"
-        ],
-        "js": [
-          "output/index.js"
-        ],
-        "all_frames": false
-      }],
+    "content_scripts": [
+        {
+            "matches": [
+                "*://*/*"
+            ],
+            "js": [
+                "output/index.js"
+            ],
+            "all_frames": false
+        }
+    ],
     "background": {
         "scripts": [
             "background_scripts/index.js"
         ]
     },
-    "calendar_provider": {
-        "capabilities": {
-            "timezones": {
-                "floating": false,
-                "UTC": false
-            },
-            "attachments": false,
-            "priority": false,
-            "privacy": [
-                "default",
-                "public",
-                "private"
-            ],
-            "categories": {
-                "count": 3
-            },
-            "alarms": {
-                "count": 5,
-                "actions": [
-                    "display",
-                    "email"
-                ]
-            },
-            "tasks": true,
-            "events": true,
-            "remove_modes": [
-                "unsubscribe"
-            ],
-            "requires_network": true,
-            "minimum_refresh_interval": 30
-        }
+    "options_ui": {
+        "page": "options/options.html",
+        "browser_style": true,
+        "open_in_tab": true
     },
     "experiment_apis": {
         "calendar_calendars": {
@@ -139,6 +119,20 @@
                         "calendarItemDetails"
                     ]
                 ]
+            }
+        },
+        "myapi": {
+            "schema": "experiments/myapi/schema.json",
+            "parent": {
+                "scopes": [
+                    "addon_parent"
+                ],
+                "paths": [
+                    [
+                        "myapi"
+                    ]
+                ],
+                "script": "experiments/myapi/implementation.js"
             }
         }
     }

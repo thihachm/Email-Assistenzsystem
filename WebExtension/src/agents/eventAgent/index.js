@@ -1,5 +1,5 @@
-import { db } from "../../db"
 import { Agent } from "../agent"
+import * as Observer from '../../observer.js'
 
 // const testevent = {
 //     title: '',
@@ -28,15 +28,13 @@ export class EventAgent extends Agent {
   /**
   * The interface to communicate with the agent. 
   * @param {String} command
-  * @param {Object} event
+  * @param {Object} data
   * @param {Number} tabId
   */
-  recieve(command, event, tabId) {
+  recieve(command, data, tabId) {
     switch (command) {
       case "hasEvent":
-        const events = this.hasEvent(event, tabId)
-        return events
-        break;
+        return this.hasEvent(tabId)
       default:
         break;
     }
@@ -57,15 +55,12 @@ export class EventAgent extends Agent {
   * @param {String} event
   * @param {Number} tabId
   */
-  async hasEvent(event, tabId) {
+  async hasEvent(tabId) {
     // get the current message from the given tab
     const messageHeader = await browser.messageDisplay.getDisplayedMessage(tabId)
-    // console.log("Checking if there is an event in email[" + messageHeader.id + "] ...");
-
     if (messageHeader) {
       const emailBody = await this.getEmailBody(messageHeader.id, "plain")
-      const events = await this.searchForEvents(emailBody)
-      console.log(events);
+      const events = await this.searchForEvents(emailBody, messageHeader.id)
       return events || []
     }
   }
@@ -74,30 +69,83 @@ export class EventAgent extends Agent {
    * Searches for an event.
    * @param {String} emailbody
    */
-  async searchForEvents(emailbody) {
-    const language = determineLanguage(emailbody) || "de"
-    const patterns = db[language]
+  async searchForEvents(emailbody, mailid) {
+
+    const rules = await Observer.observeMessages({
+      command: "getAllRules",
+      reciever: "OptionsAgent",
+      _sender: "EventAgent"
+    })
+
+    // NOTIZ: sendMessage innerhalb des background scripts nicht möglich?
+    // console.log(browser.runtime);
+    // let rules = await browser.runtime.sendMessage({
+    //   command: "getRules",
+    //   reciever: "OptionsAgent",
+    //   sender: "EventAgent"
+    // });
+    // console.log(rules);
+
+    // Erste überlegung -> gefunden = return
     let events = []
-    patterns.forEach(pattern => {
-      const event = this.applyPattern(emailbody, pattern)
-      if (event) {
-        events.push(event)
+    rules.every(pattern => {
+      if (pattern.active) {
+        events = this.testPattern(emailbody, pattern)
+        if (events && events.length > 0) {
+          //exit loop
+          return false;
+        }
       }
+      //continue
+      return true;
+    })
+
+    events.forEach(evt => {
+      evt["mailID"] = mailid
+      this.writeEvent(evt)
     })
     return events
   }
 
   /**
-    * Applies given regular expression and returns a result.
+    * Tests given regular expression and returns a result.
     * @param {String} emailbody
     * @param {Object} regex
     */
-  applyPattern(emailbody, regex) {
-    const re = new RegExp(regex.pattern, 'g');
-    const event = re.exec(emailbody)
-    if (event) {
-      return event
+  testPattern(emailbody, regex) {
+    const re = new RegExp(regex.pattern, 'gm')
+    let m
+    let allMatches = []
+    while ((m = re.exec(emailbody)) !== null) {
+      // This is necessary to avoid infinite loops with zero-width matches
+      if (m.index === re.lastIndex) {
+        re.lastIndex++
+      }
+      // console.log(m)
+      m["pattern"] = regex.pattern
+      if (!this.findDuplicateEvents(allMatches, m)) {
+        allMatches.push(Object.assign({},m))
+      }
+      // m.forEach((match, groupIndex) => {
+      //   console.log("Found match, group " + groupIndex + ": " + match);
+      // });
     }
+    let debugstr = []
+    allMatches.every(arr => debugstr.push(arr[0]))
+    this.log("EventAgent found " + allMatches.length + " match" + (allMatches.length > 1 ? "es" : "") + ". [" + debugstr.join("|") + "]");
+    return allMatches
+  }
+
+  /**
+  * 
+  * @param {Array} events
+  * @param {Object} event
+  */
+  findDuplicateEvents(events, event) {
+    return events.find(evt => {
+      // console.log(evt[0] + "==" + event[0] + ":" + (evt[0] == event[0]));
+      return evt[0] == event[0]
+    })
   }
 
   /**
