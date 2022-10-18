@@ -27,7 +27,7 @@ export class OutputAgent extends Agent {
                 this.createIcsDownload(data.event)
                 break;
             case "triggerCalendarEntry":
-                this.createCalendarEntry(data)
+                this.createCalendarEntry(data.event)
                 break;
             default:
                 break;
@@ -139,8 +139,7 @@ export class OutputAgent extends Agent {
     * Creates a calendar entry .
     * @param {Object} data
     */
-    createCalendarEntry(data) {
-        const { event } = data
+    createCalendarEntry(event) {
         if (event) {
             const parsedDate = DateParser.fromString(event[0])
             const eventproperties = this.createIcsProperties(parsedDate)
@@ -168,20 +167,23 @@ export class OutputAgent extends Agent {
     * @param {Object} groups
     */
     createIcsDownload(event) {
-        console.log("Creating markup for ICal download. Attempting to parse eventstring: " + event[0]);
-        const eventproperties = this.createIcsProperties(event[0])
-        const ical = this.createIcsString(eventproperties)
-        if (ical) {
-            // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/downloads/download
-            browser.downloads.download({
-                url: URL.createObjectURL(new Blob([ical], { type: 'text/calendar;charset=utf-8' })),
-                filename: "event.ical"
-            })
+        if (event) {
+            this.log("Creating markup for ICal download. Attempting to parse eventstring: " + event[0]);
+            const parsedDate = DateParser.fromString(event[0])
+            const eventproperties = this.createIcsProperties(parsedDate)
+            const ical = this.createIcsString(eventproperties)
+            if (ical) {
+                // https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/downloads/download
+                browser.downloads.download({
+                    url: URL.createObjectURL(new Blob([ical], { type: 'text/calendar;charset=utf-8' })),
+                    filename: "event.ics"
+                })
+            }
         }
     }
 
     /**
-    * @param {Object} groups
+    * @param {Date} date
     * @see {https://github.com/adamgibbons/ics}
     */
     createIcsProperties(date) {
