@@ -14,8 +14,6 @@
   var { XPCOMUtils } = ChromeUtils.import("resource://gre/modules/XPCOMUtils.jsm");
   XPCOMUtils.defineLazyGlobalGetters(exports, ["IOUtils"]);
 
-  var { FileUtils } = ChromeUtils.import("resource://gre/modules/FileUtils.jsm")
-  // var { OS } = ChromeUtils.import("resource://gre/modules/osfile.jsm");
   /**
    * ChromeUtils.import() works in experiments for core resource urls as it did
    * in legacy add-ons. However, chrome:// urls that point to add-on resources no
@@ -37,26 +35,6 @@
     getAPI(context) {
       return {
         myapi: {
-          //https://dailydevsblog.com/troubleshoot/resolved-how-to-execute-access-local-file-from-thunderbird-webextension-42730/
-          execute: async function (executable, arrParams) {
-            var fileExists = await IOUtils.exists(executable);
-            if (!fileExists) {
-              Services.wm.getMostRecentWindow("mail:3pane")
-                .alert("Executable [" + executable + "] not found!");
-              return false;
-            }
-            // var progPath = new FileUtils.File(executable);
-            var env = Cc["@mozilla.org/process/environment;1"].getService(Ci.nsIEnvironment);
-            var exepath = env.get("WINDIR") + "\\notepad.exe";
-            var progPath = new FileUtils.File(exepath);
-
-            let process = Cc["@mozilla.org/process/util;1"].createInstance(Ci.nsIProcess);
-            process.init(progPath);
-            process.startHidden = false;
-            process.noShell = true;
-            process.run(true, arrParams, arrParams.length);
-            return true;
-          },
           readDB: async function (filenpath) {
             let Scope = ChromeUtils.import(
               "resource://gre/modules/osfile/osfile_shared_allthreads.jsm"
