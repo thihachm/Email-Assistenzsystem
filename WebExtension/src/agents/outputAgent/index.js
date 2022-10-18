@@ -215,5 +215,6 @@ export class OutputAgent extends Agent {
     formatDateForCalendarEntry(date) {
         return date.toISOString().replace(/\.\d+Z$/, "").replace(/[:-]/g, "");
     }
+    
     //#endregion
 }

@@ -5,6 +5,9 @@ let couterToClearLog = 100
 const entriesToWriteLog = 6
 const DEBUG = true
 
+/**
+ * 
+ */
 const setBasePath = async () => {
     const { basepath } = await browser.storage.local.get("basepath").then((item) => {
         return item
@@ -33,17 +36,9 @@ const log = async (message) => {
             couterToClearLog--
         }
     }
-    if (outputBasePath == "") {
+    if (outputBasePath === "") {
         console.log("Setup output base path in extension settings first.");
     }
-    // const timer = setInterval(async function () {
-    //     if (debugQuery.length > 0 && outputBasePath != "") {
-    //         const text = debugQuery.shift()
-    //         console.log(text);
-    //         await browser.myapi.writeJson(outputBasePath, text)
-    //     }
-    //     if (debugQuery.length === 0) clearInterval(timer);
-    // }, 5000);
 }
 /**
  * 

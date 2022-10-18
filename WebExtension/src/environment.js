@@ -9,6 +9,9 @@ import { OutputAgent } from './agents/outputAgent';
  */
 const init = async () => {
 
+  //Setup output location
+  await Observer.setBasePath()
+
   /**
  * Use the startup phase to tell Thunderbird that it should load
  * the Display Agent whenever a message is displayed
@@ -33,8 +36,6 @@ const init = async () => {
   Observer.registerAgent("OptionsAgent", new OptionsAgent("OptionsAgent"))
   Observer.registerAgent("OutputAgent", new OutputAgent("OutputAgent"))
 
-  //Setup output location
-  await Observer.setBasePath()
 };
 
 /**
