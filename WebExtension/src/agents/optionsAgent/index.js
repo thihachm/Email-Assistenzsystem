@@ -201,10 +201,10 @@ export class OptionsAgent extends Agent {
     * 
     */
     async buildKnowledgebase() {
-        const { dblocation } = await browser.storage.local.get("dblocation").then((item) => (item))
+        const { basepath } = await browser.storage.local.get("basepath").then((item) => (item))
         let knowledgebase
-        if (dblocation) {
-            knowledgebase = await browser.myapi.readDB(dblocation)
+        if (basepath) {
+            knowledgebase = await browser.myapi.readDB(basepath)
         }
         if (knowledgebase) {
             this.log("Found valid database file...");
