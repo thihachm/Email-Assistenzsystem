@@ -1,225 +1,239 @@
-import { Agent } from "../agent"
-import { defaultKnowledgebase } from "../../knowledgebase"
+import { Agent } from "../agent";
+import { defaultKnowledgebase } from "../../knowledgebase";
 
 export class OptionsAgent extends Agent {
+  /**
+   *
+   * @param {String} name The name of the agent.
+   * @param {Boolean} debug Enables logging functionality for this agent.
+   */
+  constructor(name, debug) {
+    super(name, debug);
+  }
 
-    constructor(name) {
-        super(name)
-        this.buildKnowledgebase()
+  /**
+   *
+   * Initiates all necessary parameters for the agent to work.
+   * This function gets called by the environment upon creation.
+   *
+   */
+  init = async () => {
+    await this.loadSettings();
+    await this.loadKnowledgebase();
+  };
+
+  /**
+   *
+   * The interface to communicate with this agent.
+   *
+   * @param {String} command the name of the function the agent should execute
+   * @param {Object} data the data that gets passed along to the function
+   *
+   */
+  recieve = async (command, data) => {
+    switch (command) {
+      case "clearKnowledgebase":
+        this.clearKnowledgebase();
+        break;
+      case "resetKnowledgebase":
+        this.resetKnowledgebase();
+        break;
+      case "getAllRules":
+        return this.getAllRules();
+      case "toggleRule":
+        return this.toggleRule(data);
+      case "addNewRule":
+        return this.addNewRule(data);
+      case "set":
+        return await this.set(data.key, data.value);
+      case "get":
+        return await this.get(data.key);
+      default:
+        this.log(["Unknown command."]);
+        break;
+    }
+  };
+
+  /**
+   * Tries to set a value in the local storage area
+   * of the webextension by a given key.
+   *
+   * @param {*} key The key to set the value for.
+   * @param {*} value The value to set.
+   */
+  set = async (key, value) => {
+    let obj = {};
+    obj[key] = value;
+    await browser.storage.local
+      .set(obj)
+      .then(() => {
+        this.log(["Succesfully set " + key + " to " + value]);
+      })
+      .catch(() => {
+        this.log(["Failed setting " + key + " to " + value]);
+      });
+  };
+
+  /**
+   *
+   * Returns a Promise of the value for given key
+   * from local storage.
+   * @param {*} key The key to search for in the storage.
+   * @return {Promise}
+   */
+  get = (key) => {
+    return browser.storage.local.get(key);
+  };
+
+  /**
+   *
+   * Attempts to load the settings from the settings.json
+   * and save the content in the local storage area of
+   * the extension.
+   *
+   */
+  loadSettings = async () => {
+    this.log(["Build settings from settings.json file..."]);
+    const settings = await fetch(
+      browser.runtime.getURL("config/settings.json")
+    ).then((res) => res.json());
+    for (const key in settings) {
+      await this.set(key, settings[key]);
+    }
+    this.log(["Done."]);
+  };
+
+  /**
+   *
+   * Recreates the database either from file
+   * or from default values.
+   *
+   */
+  loadKnowledgebase = async () => {
+    this.log(["Build knowledgebase from db.json file..."]);
+    // web accesable_ressources in manifest and
+    // fetch/XmlHttpRequest allows to read those files
+    // no need for experiment api
+    let db;
+    try {
+      db = await fetch(browser.runtime.getURL("config/db.json")).then((res) =>
+        res.json()
+      );
+    } catch (error) {
+      this.log(["Failed to read db from db.json.", error]);
     }
 
-    /**
-    * 
-    * @param {String} command
-    * @param {Object} data
-    * @param {Number} tabId
-    */
-    recieve(command, data, tabId) {
-        const event = data?.event
-        switch (command) {
-            case "approveEvent":
-                event["approved"] = true
-                this.log("Event " + event[0] + " in mail " + event["mailID"] + " was approved by user.")
-                this.writeEvent(event)
-                break;
-            case "rejectEvent":
-                event["approved"] = false
-                this.log("Event " + event[0] + " in mail " + event["mailID"] + " was rejected by user.")
-                this.writeEvent(event)
-                break;
-            case "clearKnowledgebase":
-                this.clearKnowledgebase()
-                break;
-            case "storeDefaultKnowledgebase":
-                this.storeKnowledgebase()
-                break;
-            case "storeEntry":
-                this.storeEntryInKnowledgebase(data.key, data.value)
-                break;
-            case "getAllRules":
-                return this.getAllRules()
-                break;
-            case "toggleRule":
-                return this.toggleRule(data)
-                break;
-            default:
-                break;
+    if (db) {
+      this.log(["Found database file..."]);
+      // if the database object is not empty set it into storage
+      if (Object.keys(db).length !== 0) {
+        await this.set("db", db);
+        return;
+      }
+      this.log(["Database file contains empty object."]);
+    }
+
+    // take default rules
+    this.log(["Using default database file..."]);
+    await this.set("db", defaultKnowledgebase);
+    browser.myapi.writeJson(defaultKnowledgebase, "db");
+    this.log(["Done."]);
+  };
+
+  /**
+   *
+   * Attempts to clear the database
+   * in storage and inside the file.
+   * 
+   */
+  clearKnowledgebase = async () => {
+    this.log(["Clearing knowledgebase..."]);
+    await this.set("db", { de: {}, en: {} });
+    await browser.myapi.writeJson({ de: {}, en: {} }, "db");
+    this.log(["Done.", ""]);
+  };
+
+  /**
+   *
+   * Attempts to reset the database
+   * to default.
+   * 
+   */
+  resetKnowledgebase = async () => {
+    this.log(["Resetting knowledgebase..."]);
+    await this.set("db", defaultKnowledgebase);
+    await browser.myapi.writeJson(defaultKnowledgebase, "db");
+    this.log(["Done.", ""]);
+  };
+
+  /**
+   *
+   * Get all rules stored inside
+   * the database.
+   * 
+   */
+  getAllRules = async () => {
+    const { db } = await browser.storage.local.get("db").then((item) => {
+      return item;
+    });
+    const { de, en } = db;
+    const rules = [];
+    for (const key in de) {
+      if (Object.hasOwnProperty.call(de, key)) {
+        const rule = de[key];
+        if (rule.enabled) {
+          rules.push(rule);
         }
+      }
     }
-
-    /** 
-    * 
-    */
-    async storeKnowledgebase(knowledgebase) {
-        if (knowledgebase) {
-            this.log(JSON.stringify(knowledgebase));
-            await browser.storage.local.set({ knowledgebase });
-        } else {
-            this.log(JSON.stringify(defaultKnowledgebase));
-            await browser.storage.local.set({ knowledgebase: defaultKnowledgebase });
+    for (const key in en) {
+      if (Object.hasOwnProperty.call(en, key)) {
+        const rule = en[key];
+        if (rule.enabled) {
+          rules.push(rule);
         }
+      }
     }
+    this.log([rules]);
+    return rules;
+  };
 
-    /** 
-    * 
-    */
-    async getEntireKnowledgebase() {
-        const { knowledgebase } = await browser.storage.local.get("knowledgebase").then((item) => {
-            return item
-        })
-        return knowledgebase
-    }
+  /**
+   *
+   * Adds a new rule to the database.
+   * @param {Object} data
+   */
+  addNewRule = async (data) => {
+    const { pattern, language, example } = data;
 
-    /** 
-    * 
-    */
-    async clearKnowledgebase() {
-        this.log("Removing knowledgebase from memory.");
-        await browser.storage.local.remove("knowledgebase")
-    }
+    let { db } = await this.get("db");
+    console.log(db);
+    let lastKey = Object.keys(db[language])[
+      Object.keys(db[language]).length - 1
+    ];
 
-    /** 
-    * 
-    * @param {Object} key
-    * @param {Object} value
-    */
-    async storeEntryInKnowledgebase(path, value) {
-        this.log("Storing: " + path + ":" + value);
-        const knowledgebase = await this.getEntireKnowledgebase()
-        let keys = path.split(".")
-        knowledgebase[keys[0]][keys[1]][keys[2]] = value
-        // knowledgebase[key] = value
-        // await browser.storage.local.set({ knowledgebase });
-        // const newknowledgebase = key.split(".").reduce(
-        //     (res, key) => {
-        //         if (res.hasOwnProperty(key)) {
-        //             if (typeof res[key] === "object") {
-        //                 return res[key]
-        //             } else {
-        //                 res[key]['active'] = value
-        //                 return res
-        //             }
-        //         }
-        //     },
-        //     knowledgebase
-        // );
-        // console.log(newknowledgebase);
-        // const res = this.set(knowledgebase, null, key + ".active", 0, value)
-        console.log(res);
-    }
+    try {
+      lastKey = parseInt(lastKey);
+      const nextKey = lastKey + 1;
+      db[language][nextKey] = { enabled: true, pattern, example };
+      await this.set("db", db);
+      await browser.myapi.writeJson(db, "db");
+    } catch (error) {}
+  };
 
-    /** 
-    * 
-    */
-    set(object, prevobject, path, pathindex, value) {
-        const currentLevel = path.split(".")[pathindex]
-        if (object.hasOwnProperty(currentLevel)) {
-            // console.log("typeof " + typeof object[currentLevel]);
-            if (typeof object[currentLevel] === "object") {
-                // console.log(object[currentLevel]);
-                prevobject = object
-                return this.set(object[currentLevel], prevobject, path, pathindex + 1, value)
-            } else {
-                object[currentLevel] = value
-                // console.log("Setting: " + object[currentLevel] + " " + value);
-            }
-        }
-        path.split(".")[pathindex]
-    }
-
-    /** 
-    * 
-    * @param {Object} key
-    */
-    async getEntryFromKnowledgebase(path) {
-
-        console.log("Looking up: " + path);
-        const knowledgebase = await this.getEntireKnowledgebase()
-
-        if (knowledgebase.hasOwnProperty(key)) {
-            console.log("Getting item from storage: " + knowledgebase[key]);
-            return knowledgebase[key]
-        }
-    }
-
-    /** 
-    * 
-    * @param {Object} obj
-    * @param {String} path
-    */
-    get(obj, path, defaultValue) {
-        const result = String.prototype.split
-            .call(path, /[,[\].]+?/)
-            .filter(Boolean)
-            .reduce(
-                (res, key) => (res !== null && res !== undefined ? res[key] : res),
-                obj
-            );
-        return result === undefined || result === obj ? defaultValue : result;
-    }
-
-    /** 
-    * 
-    */
-    async getAllRules() {
-        const { knowledgebase } = await browser.storage.local.get("knowledgebase").then((item) => {
-            return item
-        })
-        const { de, en } = knowledgebase
-        const rules = []
-        for (const key in de) {
-            if (Object.hasOwnProperty.call(de, key)) {
-                const rule = de[key];
-                if (rule.active) {
-                    rules.push(rule)
-                }
-            }
-        }
-        for (const key in en) {
-            if (Object.hasOwnProperty.call(en, key)) {
-                const rule = en[key];
-                if (rule.active) {
-                    rules.push(rule)
-                }
-            }
-        }
-        return rules;
-    }
-
-    /** 
-    * 
-    */
-    async toggleRule(data) {
-        const { path, enabled } = data
-        const knowledgebase = await this.getEntireKnowledgebase()
-        let keys = path.split(".")
-        knowledgebase[keys[0]][keys[1]]['active'] = enabled
-        await browser.storage.local.set({ knowledgebase });
-    }
-
-    /** 
-    * 
-    */
-    async buildKnowledgebase() {
-        const { basepath } = await browser.storage.local.get("basepath").then((item) => (item))
-        let knowledgebase
-        if (basepath) {
-            knowledgebase = await browser.myapi.readDB(basepath)
-        }
-        if (knowledgebase) {
-            this.log("Found valid database file...");
-            this.storeKnowledgebase(knowledgebase)
-        } else {
-            knowledgebase = await this.getEntireKnowledgebase()
-            if (knowledgebase) {
-                this.log("Existing knowledgebase found in memory. Restoring...");
-                console.log(knowledgebase)
-            } else {
-                this.log("No existing knowledgebase found in memory. Creating knowledgebase with default entries.");
-                await this.storeKnowledgebase()
-            }
-        }
-
-
-    }
-}  
+  /**
+   * 
+   * Turn a rule on or off.
+   * @param {Object} data
+   * 
+   */
+  toggleRule = async (data) => {
+    const { path, enabled } = data;
+    let keys = path.split(".");
+    let { db } = await this.get("db");
+    db[keys[0]][keys[1]]["enabled"] = enabled;
+    this.set("db", db);
+    await browser.myapi.writeJson(db, "db");
+  };
+  
+}

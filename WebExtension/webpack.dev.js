@@ -2,7 +2,8 @@ const path = require("path");
 const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
-  mode: "production",
+  mode: "development",
+  devtool: "inline-source-map",
   entry: {
     background_scripts: "./src/environment.js",
     output: "./src/agents/displayAgent/index.js",
@@ -29,12 +30,12 @@ module.exports = {
           to: path.resolve(__dirname, "dist", "output", "index.css"),
         },
         {
-          from: path.resolve(__dirname, "src", "config"),
-          to: path.resolve(__dirname, "dist", "config"),
-        },
-        {
           from: path.resolve(__dirname, "src", "images"),
           to: path.resolve(__dirname, "dist", "images"),
+        },
+        {
+          from: path.resolve(__dirname, "src", "config"),
+          to: path.resolve(__dirname, "dist", "config"),
         },
         {
           from: path.resolve(__dirname, "src", "options"),

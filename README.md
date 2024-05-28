@@ -1,7 +1,7 @@
-# Event-Recognition System
+# Personal Information Management System 
 
 ## Motivation
-Creating an email assistance system for the email software Thunderbird. In the first step it should support the user in recognizing events within the email.
+Creating a personal information management system for the email software Thunderbird. In the first step it should support the user in recognizing events within the email.
 ## Data
 To support event recognition, the first step is to search texts for common and frequent temporal patterns in sentences in order to create regular expressions from them in the next step. The following german and english datasets are being used:
 ### 1. CODE ALLTAG 2.0

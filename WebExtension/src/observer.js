@@ -1,100 +1,91 @@
-let agents = {}
-let outputBasePath = ""
-let debugQuery = []
-let couterToClearLog = 100
-const entriesToWriteLog = 6
-const DEBUG = true
+/**
+ *
+ * The observer class provides the log function
+ * that gets injected into every agent and is used
+ * for logging purpose when agents communicate between
+ * eachother.
+ * 
+ */
+
+// the agents that were registered
+let agents = {};
+
 
 /**
  * 
+ * @param {Array[]} messages Messages that getting logged to console.
+ * @param {String} source Name of the source that is logging the messages.
+ * 
  */
-const setBasePath = async () => {
-    const { basepath } = await browser.storage.local.get("basepath").then((item) => {
-        return item
-    })
-    basepath ? console.log("Writing output to " + basepath + ".") : ""
-    outputBasePath = basepath || ""
-}
+const log = async (messages, source) => {
+  messages.forEach((message) =>
+    console.log(
+      "[" +
+        new Date().toLocaleTimeString() +
+        "]" +
+        (source ? "[" + source + "]" : "") +
+        ": ",
+      message
+    )
+  );
+};
 
 /**
  * 
- */
-const log = async (message) => {
-    const text = "[" + new Date().toLocaleTimeString() + "]: " + message
-    if (DEBUG) { console.log(message) }
-    debugQuery.push(text)
-    if (debugQuery.length >= entriesToWriteLog && outputBasePath != "") {
-        const output = debugQuery.join(",")
-        console.log(output);
-        const resp = browser.myapi.writeJson(outputBasePath, output)
-        if (resp || couterToClearLog === 0) {
-            console.log("Writing log to file succeeded.");
-            couterToClearLog = 100
-            debugQuery = []
-        } else {
-            console.log("Writing log to file failed.");
-            couterToClearLog--
-        }
-    }
-    if (outputBasePath === "") {
-        console.log("Setup output base path in extension settings first.");
-    }
-}
-/**
- * 
- */
-const writeEvent = async (evt) => {
-    const text = "[" + new Date().toLocaleTimeString() + "]: " + evt
-    if (DEBUG) { console.log(evt) }
-    if (outputBasePath != "") {
-        browser.myapi.writeEvent(outputBasePath, JSON.stringify(evt), evt[0], evt['mailID'])
-    }
-}
-
-/**
- * 
+ * Register an agent so the observer has access
+ * to its communication.
+ * @param {String} name Name of the agent.
+ * @param {Object} agent The agent object.
  */
 const registerAgent = (name, agent) => {
-    // const alreadyRegistered = agents.filter(element => element.name == agent.name)
-    // if (alreadyRegistered.length == 0) {
-    //     agents.push(agent)
-    // }
-    agents[name] = agent
+  agents[name] = agent;
 };
 
+
 /**
- * Handles the commands received from an observed message.
+ * 
+ * Handles the commands received from an observed message
+ * of one of the agents.
+ * @param {Object} message The message object for communication with agents.
+ * @param {Number} tabId Optional tab id of initiating agent.
  */
-const doHandleCommand = async (message, sender) => {
-    const { command, reciever, _sender, data } = message
+const doHandleCommand = async (message, tabId) => {
+  let { command, reciever, sender, data } = message;
 
-    if (command == "log") {
-        log(message.text)
-        return
-    }
-    if (command == "updateBasePath") {
-        setBasePath()
-        return
-    } else {
-        log(_sender + " -> " + command + " -> " + reciever)
-    }
+  switch (command) {
+    case "log":
+      log([message.text], "Observer");
+      return;
+    default:
+      log([sender + " -> " + command + " -> " + reciever], "Observer");
+      if (data) {
+        log([data], "Observer");
+      }
+      break;
+  }
 
-    //updateDebugLocation hat observer als reciever
-    if (reciever) {
-        // const { tab: { id: tabId } } = sender
-        const tabId = sender?.tab?.id
-        return agents[reciever].recieve(command, data, tabId)
-    }
+  if (reciever) {
+    return agents[reciever].recieve(command, data, tabId);
+  } else {
+    log(["No reciever specified."], "Observer");
+  }
 };
 
 /**
+ * 
  * Handle the received message by filtering for all messages
  * whose "type" property is set to "command".
+ * @param {Object} message The message object for communication with agents.
+ * @param {Object} sender The sender object.
+ * @see https://developer.thunderbird.net/add-ons/hello-world-add-on/using-content-scripts#receiving-a-runtime-message
  */
-const observeMessages = (message, sender, sendResponse) => {
-    if (message && message.hasOwnProperty("command")) {
-        return doHandleCommand(message, sender);
-    }
+const observeMessages = (message, sender) => {
+  if (message && message.hasOwnProperty("command")) {
+    // The parameter tabId is necessary for the event agent
+    // for querying the email content of the active and shown tab
+    const tabId = sender?.tab?.id;
+    return doHandleCommand(message, tabId);
+  }
 };
 
-export { observeMessages, registerAgent, setBasePath, log, writeEvent }
+export { observeMessages, registerAgent, log };
