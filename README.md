@@ -2,18 +2,6 @@
 
 ## Motivation
 Creating a personal information management system for the email software Thunderbird. In the first step it should support the user in recognizing events within the email.
-## Data
-To support event recognition, the first step is to search texts for common and frequent temporal patterns in sentences in order to create regular expressions from them in the next step. The following german and english datasets are being used:
-### 1. CODE ALLTAG 2.0
-This [dataset](https://github.com/codealltag) is a fully pseudonymized collection of emails in german language.
-### 2. Enron Email Dataset
-This [dataset](https://www.cs.cmu.edu/~enron/) contains data from about 150 users, mostly senior management of "Enron", organized into folders. The corpus contains a total of about 0.5M messages.
-
-## Helper (python modules)
-
-- generation - scrapes various sources to generate text for pattern search
-- preprocessing - sanitises text
-- extraction -  extracts pattern from text (NYI)
 
 ## Thunderbird Extension
 ### 1. Build
