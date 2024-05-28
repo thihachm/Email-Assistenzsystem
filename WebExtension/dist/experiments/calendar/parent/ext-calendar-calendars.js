@@ -1,1 +1,271 @@
-var{ExtensionCommon}=ChromeUtils.import("resource://gre/modules/ExtensionCommon.jsm"),{ExtensionUtils}=ChromeUtils.import("resource://gre/modules/ExtensionUtils.jsm"),{ExtensionAPI,EventManager}=ExtensionCommon,{ExtensionError}=ExtensionUtils,{Services}=ChromeUtils.import("resource://gre/modules/Services.jsm"),{cal}=ChromeUtils.import("resource:///modules/calendar/calUtils.jsm");this.calendar_calendars=class extends ExtensionAPI{getAPI(e){const{unwrapCalendar:n,getResolvedCalendarById:r,isOwnCalendar:a,convertCalendar:t}=ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");return{calendar:{calendars:{query:async function({type:n,url:r,name:a,color:l,readOnly:o,enabled:s}){let i=cal.manager.getCalendars(),c=null;if(r)try{c=new MatchPattern(r,{restrictSchemes:!1})}catch(e){throw new ExtensionError(`Invalid url pattern: ${r}`)}return i.filter((e=>{let t=!0;return n&&e.type!=n&&(t=!1),r&&!c.matches(e.uri)&&(t=!1),a&&!new MatchGlob(a).matches(e.name)&&(t=!1),l&&l!=e.getProperty("color")&&(t=!1),null!=s&&e.getProperty("disabled")==s&&(t=!1),null!=o&&e.readOnly!=o&&(t=!1),t})).map((n=>t(e.extension,n)))},get:async function(r){if(r.endsWith("#cache")){let l=n(cal.manager.getCalendarById(r.substring(0,r.length-6)));return l.offlineStorage&&a(l,e.extension)?t(e.extension,l.offlineStorage):null}{let n=cal.manager.getCalendarById(r);return t(e.extension,n)}},create:async function(n){let r=cal.manager.createCalendar(n.type,Services.io.newURI(n.url));if(!r)throw new ExtensionError(`Calendar type ${n.type} is unknown`);return r.name=n.name,void 0!==n.color&&r.setProperty("color",n.color),cal.manager.registerCalendar(r),r=cal.manager.getCalendarById(r.id),t(e.extension,r)},update:async function(n,r){let t=cal.manager.getCalendarById(n);if(!t)throw new ExtensionError(`Invalid calendar id: ${n}`);if(r.capabilities&&!a(t,e.extension))throw new ExtensionError("Cannot update capabilities for foreign calendars");if(r.url&&!a(t,e.extension))throw new ExtensionError("Cannot update url for foreign calendars");r.url&&(t.uri=Services.io.newURI(r.url)),null!=r.enabled&&t.setProperty("disabled",!r.enabled);for(let e of["readOnly","name","color"])null!=r[e]&&t.setProperty(e,r[e]);r.capabilities&&(t.capabilities=Object.assign({},t.capabilities,r.capabilities))},remove:async function(e){let n=cal.manager.getCalendarById(e);if(!n)throw new ExtensionError(`Invalid calendar id: ${e}`);cal.manager.unregisterCalendar(n)},clear:async function(n){if(!n.endsWith("#cache"))throw new ExtensionError("Cannot clear non-cached calendar");let t=r(e.extension,n),l=cal.manager.getCalendarById(n.substring(0,n.length-6));if(!a(l,e.extension))throw new ExtensionError("Cannot clear foreign calendar");await new Promise(((e,n)=>{let r={onDeleteCalendar(r,a,t){Components.isSuccessCode(a)?e():n(t)}};t.QueryInterface(Ci.calICalendarProvider).deleteCalendar(t,r)})),l.wrappedJSObject.mObservers.notify("onLoad",[l])},synchronize:function(e){let n=[];if(e){Array.isArray(e)||(e=[e]);for(let r of e){let e=cal.manager.getCalendarById(r);if(!e)throw new ExtensionError(`Invalid calendar id: ${r}`);n.push(e)}}else for(let e of cal.manager.getCalendars())e.getProperty("calendar-main-in-composite")&&n.push(e);for(let e of n)!e.getProperty("disabled")&&e.canRefresh&&e.refresh()},onCreated:new EventManager({context:e,name:"calendar.calendars.onCreated",register:n=>{let r={QueryInterface:ChromeUtils.generateQI(["calICalendarManagerObserver"]),onCalendarRegistered(r){n.sync(t(e.extension,r))},onCalendarUnregistering(e){},onCalendarDeleting(e){}};return cal.manager.addObserver(r),()=>{cal.manager.removeObserver(r)}}}).api(),onUpdated:new EventManager({context:e,name:"calendar.calendars.onUpdated",register:n=>{let r=cal.createAdapter(Ci.calIObserver,{onPropertyChanged(r,a,l,o){let s=t(e.extension,r);switch(a){case"name":case"color":case"readOnly":n.sync(s,{[a]:l});break;case"uri":n.sync(s,{url:l?.spec});break;case"disabled":n.sync(s,{enabled:!l})}}});return cal.manager.addCalendarObserver(r),()=>{cal.manager.removeCalendarObserver(r)}}}).api(),onRemoved:new EventManager({context:e,name:"calendar.calendars.onRemoved",register:e=>{let n={QueryInterface:ChromeUtils.generateQI(["calICalendarManagerObserver"]),onCalendarRegistered(e){},onCalendarUnregistering(n){e.sync(n.id)},onCalendarDeleting(e){}};return cal.manager.addObserver(n),()=>{cal.manager.removeObserver(n)}}}).api()}}}}};
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+var { ExtensionCommon } = ChromeUtils.import("resource://gre/modules/ExtensionCommon.jsm");
+var { ExtensionUtils } = ChromeUtils.import("resource://gre/modules/ExtensionUtils.jsm");
+
+var { ExtensionAPI, EventManager } = ExtensionCommon;
+var { ExtensionError } = ExtensionUtils;
+
+var { Services } = ChromeUtils.import("resource://gre/modules/Services.jsm");
+var { cal } = ChromeUtils.import("resource:///modules/calendar/calUtils.jsm");
+
+this.calendar_calendars = class extends ExtensionAPI {
+  getAPI(context) {
+    const {
+      unwrapCalendar,
+      getResolvedCalendarById,
+      isOwnCalendar,
+      convertCalendar,
+    } = ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");
+
+    return {
+      calendar: {
+        calendars: {
+          query: async function({ type, url, name, color, readOnly, enabled }) {
+            let calendars = cal.manager.getCalendars();
+
+            let pattern = null;
+            if (url) {
+              try {
+                pattern = new MatchPattern(url, { restrictSchemes: false });
+              } catch (e) {
+                throw new ExtensionError(`Invalid url pattern: ${url}`);
+              }
+            }
+
+            return calendars
+              .filter(calendar => {
+                let matches = true;
+
+                if (type && calendar.type != type) {
+                  matches = false;
+                }
+
+                if (url && !pattern.matches(calendar.uri)) {
+                  matches = false;
+                }
+
+                if (name && !new MatchGlob(name).matches(calendar.name)) {
+                  matches = false;
+                }
+
+                if (color && color != calendar.getProperty("color")) {
+                  // TODO need to normalize the color, including null to default color
+                  matches = false;
+                }
+
+                if (enabled != null && calendar.getProperty("disabled") == enabled) {
+                  matches = false;
+                }
+
+                if (readOnly != null && calendar.readOnly != readOnly) {
+                  matches = false;
+                }
+
+                return matches;
+              })
+              .map(calendar => convertCalendar(context.extension, calendar));
+          },
+          get: async function(id) {
+            // TODO find a better way to determine cache id
+            if (id.endsWith("#cache")) {
+              let calendar = unwrapCalendar(cal.manager.getCalendarById(id.substring(0, id.length - 6)));
+              let own = calendar.offlineStorage && isOwnCalendar(calendar, context.extension);
+              return own ? convertCalendar(context.extension, calendar.offlineStorage) : null;
+            } else {
+              let calendar = cal.manager.getCalendarById(id);
+              return convertCalendar(context.extension, calendar);
+            }
+          },
+          create: async function(createProperties) {
+            let calendar = cal.manager.createCalendar(
+              createProperties.type,
+              Services.io.newURI(createProperties.url)
+            );
+            if (!calendar) {
+              throw new ExtensionError(`Calendar type ${createProperties.type} is unknown`);
+            }
+
+            calendar.name = createProperties.name;
+            if (typeof createProperties.color != "undefined") {
+              calendar.setProperty("color", createProperties.color);
+            }
+
+            cal.manager.registerCalendar(calendar);
+
+            calendar = cal.manager.getCalendarById(calendar.id);
+            return convertCalendar(context.extension, calendar);
+          },
+          update: async function(id, updateProperties) {
+            let calendar = cal.manager.getCalendarById(id);
+            if (!calendar) {
+              throw new ExtensionError(`Invalid calendar id: ${id}`);
+            }
+
+            if (updateProperties.capabilities && !isOwnCalendar(calendar, context.extension)) {
+              throw new ExtensionError("Cannot update capabilities for foreign calendars");
+            }
+            if (updateProperties.url && !isOwnCalendar(calendar, context.extension)) {
+              throw new ExtensionError("Cannot update url for foreign calendars");
+            }
+
+            if (updateProperties.url) {
+              calendar.uri = Services.io.newURI(updateProperties.url);
+            }
+
+            if (updateProperties.enabled != null) {
+              calendar.setProperty("disabled", !updateProperties.enabled);
+            }
+
+            for (let prop of ["readOnly", "name", "color"]) {
+              if (updateProperties[prop] != null) {
+                calendar.setProperty(prop, updateProperties[prop]);
+              }
+            }
+
+            if (updateProperties.capabilities) {
+              // TODO validate capability names
+              calendar.capabilities = Object.assign({}, calendar.capabilities, updateProperties.capabilities);
+            }
+          },
+          remove: async function(id) {
+            let calendar = cal.manager.getCalendarById(id);
+            if (!calendar) {
+              throw new ExtensionError(`Invalid calendar id: ${id}`);
+            }
+
+            cal.manager.unregisterCalendar(calendar);
+          },
+          clear: async function(id) {
+            if (!id.endsWith("#cache")) {
+              throw new ExtensionError("Cannot clear non-cached calendar");
+            }
+
+            let offlineStorage = getResolvedCalendarById(context.extension, id);
+            let calendar = cal.manager.getCalendarById(id.substring(0, id.length - 6));
+
+            if (!isOwnCalendar(calendar, context.extension)) {
+              throw new ExtensionError("Cannot clear foreign calendar");
+            }
+
+            await new Promise((resolve, reject) => {
+              let listener = {
+                onDeleteCalendar(aCalendar, aStatus, aDetail) {
+                  if (Components.isSuccessCode(aStatus)) {
+                    resolve();
+                  } else {
+                    reject(aDetail);
+                  }
+                },
+              };
+              offlineStorage
+                .QueryInterface(Ci.calICalendarProvider)
+                .deleteCalendar(offlineStorage, listener);
+            });
+
+            calendar.wrappedJSObject.mObservers.notify("onLoad", [calendar]);
+          },
+
+          synchronize: function(ids) {
+            let calendars = [];
+            if (ids) {
+              if (!Array.isArray(ids)) {
+                ids = [ids];
+              }
+              for (let id of ids) {
+                let calendar = cal.manager.getCalendarById(id);
+                if (!calendar) {
+                  throw new ExtensionError(`Invalid calendar id: ${id}`);
+                }
+                calendars.push(calendar);
+              }
+            } else {
+              for (let calendar of cal.manager.getCalendars()) {
+                if (calendar.getProperty("calendar-main-in-composite")) {
+                  calendars.push(calendar);
+                }
+              }
+            }
+            for (let calendar of calendars) {
+              if (!calendar.getProperty("disabled") && calendar.canRefresh) {
+                calendar.refresh();
+              }
+            }
+          },
+
+          onCreated: new EventManager({
+            context,
+            name: "calendar.calendars.onCreated",
+            register: fire => {
+              let observer = {
+                QueryInterface: ChromeUtils.generateQI(["calICalendarManagerObserver"]),
+                onCalendarRegistered(calendar) {
+                  fire.sync(convertCalendar(context.extension, calendar));
+                },
+                onCalendarUnregistering(calendar) {},
+                onCalendarDeleting(calendar) {},
+              };
+
+              cal.manager.addObserver(observer);
+              return () => {
+                cal.manager.removeObserver(observer);
+              };
+            },
+          }).api(),
+
+          onUpdated: new EventManager({
+            context,
+            name: "calendar.calendars.onUpdated",
+            register: fire => {
+              let observer = cal.createAdapter(Ci.calIObserver, {
+                onPropertyChanged(calendar, name, value, oldValue) {
+                  let converted = convertCalendar(context.extension, calendar);
+                  switch (name) {
+                    case "name":
+                    case "color":
+                    case "readOnly":
+                      fire.sync(converted, { [name]: value });
+                      break;
+                    case "uri":
+                      fire.sync(converted, { url: value?.spec });
+                      break;
+                    case "disabled":
+                      fire.sync(converted, { enabled: !value });
+                      break;
+                  }
+                },
+              });
+
+              cal.manager.addCalendarObserver(observer);
+              return () => {
+                cal.manager.removeCalendarObserver(observer);
+              };
+            },
+          }).api(),
+
+          onRemoved: new EventManager({
+            context,
+            name: "calendar.calendars.onRemoved",
+            register: fire => {
+              let observer = {
+                QueryInterface: ChromeUtils.generateQI(["calICalendarManagerObserver"]),
+                onCalendarRegistered(calendar) {},
+                onCalendarUnregistering(calendar) {
+                  fire.sync(calendar.id);
+                },
+                onCalendarDeleting(calendar) {},
+              };
+
+              cal.manager.addObserver(observer);
+              return () => {
+                cal.manager.removeObserver(observer);
+              };
+            },
+          }).api(),
+        },
+      },
+    };
+  }
+};

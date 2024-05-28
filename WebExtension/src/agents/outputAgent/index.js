@@ -52,6 +52,7 @@ export class OutputAgent extends Agent {
       this.attemptCreateCalendar(this.calendarName);
     }
 
+    this.addListeners();
   };
 
   /**
@@ -79,6 +80,23 @@ export class OutputAgent extends Agent {
   };
 
   //#region CALENDAR
+
+  /**
+   * Adds listener onCreated for usernotification.
+   */
+  addListeners = () => {
+    messenger.calendar.items.onCreated.addListener(
+      (item) => {
+        console.log("Created item", item);
+        browser.notifications.create({
+          type: "basic",
+          title: "New calender entry",
+          message: item.title,
+        });
+      },
+      { returnFormat: "ical" }
+    );
+  };
 
   /**
    * Attempts to create a calendar.

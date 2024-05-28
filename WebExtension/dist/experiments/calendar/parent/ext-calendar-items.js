@@ -1,1 +1,230 @@
-var{ExtensionCommon}=ChromeUtils.import("resource://gre/modules/ExtensionCommon.jsm"),{ExtensionUtils}=ChromeUtils.import("resource://gre/modules/ExtensionUtils.jsm"),{cal}=ChromeUtils.import("resource:///modules/calendar/calUtils.jsm"),{ExtensionAPI,EventManager}=ExtensionCommon,{ExtensionError}=ExtensionUtils;this.calendar_items=class extends ExtensionAPI{getAPI(e){const{getResolvedCalendarById:a,getCachedCalendar:n,isCachedCalendar:t,isOwnCalendar:r,propsToItem:i,convertItem:l,convertAlarm:o}=ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");return{calendar:{items:{query:async function(n){console.log(n);let t,r=[];return r="string"==typeof n.calendarId?[a(e.extension,n.calendarId)]:Array.isArray(n.calendarId)?n.calendarId.map((n=>a(e.extension,n))):cal.manager.getCalendars().filter((e=>!e.getProperty("disabled"))),n.id?t=await Promise.all(r.map((e=>e.getItem(n.id)))):(t=await Promise.all(r.map((async e=>{let a=Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL;"event"==n.type?a|=Ci.calICalendar.ITEM_FILTER_TYPE_EVENT:"task"==n.type?a|=Ci.calICalendar.ITEM_FILTER_TYPE_TODO:a|=Ci.calICalendar.ITEM_FILTER_TYPE_ALL,n.expand&&(a|=Ci.calICalendar.ITEM_FILTER_CLASS_OCCURRENCES);let t=n.rangeStart?cal.createDateTime(n.rangeStart):null,r=n.rangeEnd?cal.createDateTime(n.rangeEnd):null;return e.getItemsAsArray(a,n.limit??0,t,r)}))),t=t.flat()),t.map((a=>l(a,n,e.extension)))},get:async function(n,t,r){let i=a(e.extension,n),o=await i.getItem(t);return l(o,r,e.extension)},create:async function(o,s){let d,m=a(e.extension,o),c=i(s);return c.calendar=m.superCalendar,s.metadata&&r(m,e.extension)&&n(m).setMetaData(c.id,JSON.stringify(s.metadata)),d=t(o)?await m.modifyItem(c,null):await m.adoptItem(c),l(d,s,e.extension)},update:async function(t,o,s){let d=a(e.extension,t),m=await d.getItem(o);if(!m)throw new ExtensionError("Could not find item "+o);m instanceof Ci.calIEvent?s.type="event":m instanceof Ci.calITodo&&(s.type="task");let c=i(s,m?.clone());c.calendar=d.superCalendar,s.metadata&&r(d,e.extension)&&n(d).setMetaData(c.id,JSON.stringify(s.metadata));let C=await d.modifyItem(c,m);return l(C,s,e.extension)},move:async function(a,t,i){if(a==i)return;let l=cal.manager.getCalendarById(a),o=cal.manager.getCalendarById(i),s=await l.getItem(t);if(!s)throw new ExtensionError("Could not find item "+t);if(r(o,e.extension)&&r(l,e.extension)){let e=n(l);n(o).setMetaData(s.id,e.getMetaData(s.id))}await o.addItem(s),await l.deleteItem(s)},remove:async function(n,t){let r=a(e.extension,n),i=await r.getItem(t);if(!i)throw new ExtensionError("Could not find item "+t);await r.deleteItem(i)},onCreated:new EventManager({context:e,name:"calendar.items.onCreated",register:(a,n)=>{let t=cal.createAdapter(Ci.calIObserver,{onAddItem:t=>{a.sync(l(t,n,e.extension))}});return cal.manager.addCalendarObserver(t),()=>{cal.manager.removeCalendarObserver(t)}}}).api(),onUpdated:new EventManager({context:e,name:"calendar.items.onUpdated",register:(a,n)=>{let t=cal.createAdapter(Ci.calIObserver,{onModifyItem:(t,r)=>{a.sync(l(t,n,e.extension),{})}});return cal.manager.addCalendarObserver(t),()=>{cal.manager.removeCalendarObserver(t)}}}).api(),onRemoved:new EventManager({context:e,name:"calendar.items.onRemoved",register:e=>{let a=cal.createAdapter(Ci.calIObserver,{onDeleteItem:a=>{e.sync(a.calendar.id,a.id)}});return cal.manager.addCalendarObserver(a),()=>{cal.manager.removeCalendarObserver(a)}}}).api(),onAlarm:new EventManager({context:e,name:"calendar.items.onAlarm",register:(a,n)=>{let t={QueryInterface:ChromeUtils.generateQI(["calIAlarmServiceObserver"]),onAlarm(t,r){a.sync(l(t,n,e.extension),o(t,r))},onRemoveAlarmsByItem(e){},onRemoveAlarmsByCalendar(e){},onAlarmsLoaded(e){}},r=Cc["@mozilla.org/calendar/alarm-service;1"].getService(Ci.calIAlarmService);return r.addObserver(t),()=>{r.removeObserver(t)}}}).api()}}}}};
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+var { ExtensionCommon } = ChromeUtils.import("resource://gre/modules/ExtensionCommon.jsm");
+var { ExtensionUtils } = ChromeUtils.import("resource://gre/modules/ExtensionUtils.jsm");
+var { cal } = ChromeUtils.import("resource:///modules/calendar/calUtils.jsm");
+
+var { ExtensionAPI, EventManager } = ExtensionCommon;
+var { ExtensionError } = ExtensionUtils;
+
+this.calendar_items = class extends ExtensionAPI {
+  getAPI(context) {
+    const {
+      getResolvedCalendarById,
+      getCachedCalendar,
+      isCachedCalendar,
+      isOwnCalendar,
+      propsToItem,
+      convertItem,
+      convertAlarm,
+    } = ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");
+
+    return {
+      calendar: {
+        items: {
+          query: async function(queryProps) {
+            console.log(queryProps);
+            let calendars = [];
+            if (typeof queryProps.calendarId == "string") {
+              calendars = [getResolvedCalendarById(context.extension, queryProps.calendarId)];
+            } else if (Array.isArray(queryProps.calendarId)) {
+              calendars = queryProps.calendarId.map(calendarId => getResolvedCalendarById(context.extension, calendarId));
+            } else {
+              calendars = cal.manager.getCalendars().filter(calendar => !calendar.getProperty("disabled"));
+            }
+
+
+            let calendarItems;
+            if (queryProps.id) {
+              calendarItems = await Promise.all(calendars.map(calendar => {
+                return calendar.getItem(queryProps.id);
+              }));
+            } else {
+              calendarItems = await Promise.all(calendars.map(async calendar => {
+                let filter = Ci.calICalendar.ITEM_FILTER_COMPLETED_ALL;
+                if (queryProps.type == "event") {
+                  filter |= Ci.calICalendar.ITEM_FILTER_TYPE_EVENT;
+                } else if (queryProps.type == "task") {
+                  filter |= Ci.calICalendar.ITEM_FILTER_TYPE_TODO;
+                } else {
+                  filter |= Ci.calICalendar.ITEM_FILTER_TYPE_ALL;
+                }
+
+                if (queryProps.expand) {
+                  filter |= Ci.calICalendar.ITEM_FILTER_CLASS_OCCURRENCES;
+                }
+
+                let rangeStart = queryProps.rangeStart ? cal.createDateTime(queryProps.rangeStart) : null;
+                let rangeEnd = queryProps.rangeEnd ? cal.createDateTime(queryProps.rangeEnd) : null;
+                return calendar.getItemsAsArray(filter, queryProps.limit ?? 0, rangeStart, rangeEnd);
+              }));
+              calendarItems = calendarItems.flat();
+            }
+
+            return calendarItems.map(item => convertItem(item, queryProps, context.extension));
+          },
+          get: async function(calendarId, id, options) {
+            let calendar = getResolvedCalendarById(context.extension, calendarId);
+            let item = await calendar.getItem(id);
+
+            return convertItem(item, options, context.extension);
+          },
+          create: async function(calendarId, createProperties) {
+            let calendar = getResolvedCalendarById(context.extension, calendarId);
+            let item = propsToItem(createProperties);
+            item.calendar = calendar.superCalendar;
+
+            if (createProperties.metadata && isOwnCalendar(calendar, context.extension)) {
+              let cache = getCachedCalendar(calendar);
+              cache.setMetaData(item.id, JSON.stringify(createProperties.metadata));
+            }
+
+            let createdItem;
+            if (isCachedCalendar(calendarId)) {
+              createdItem = await calendar.modifyItem(item, null);
+            } else {
+              createdItem = await calendar.adoptItem(item);
+            }
+
+            return convertItem(createdItem, createProperties, context.extension);
+          },
+          update: async function(calendarId, id, updateProperties) {
+            let calendar = getResolvedCalendarById(context.extension, calendarId);
+
+            let oldItem = await calendar.getItem(id);
+            if (!oldItem) {
+              throw new ExtensionError("Could not find item " + id);
+            }
+            if (oldItem instanceof Ci.calIEvent) {
+              updateProperties.type = "event";
+            } else if (oldItem instanceof Ci.calITodo) {
+              updateProperties.type = "task";
+            }
+            let newItem = propsToItem(updateProperties, oldItem?.clone());
+            newItem.calendar = calendar.superCalendar;
+
+            if (updateProperties.metadata && isOwnCalendar(calendar, context.extension)) {
+              // TODO merge or replace?
+              let cache = getCachedCalendar(calendar);
+              cache.setMetaData(newItem.id, JSON.stringify(updateProperties.metadata));
+            }
+
+            let modifiedItem = await calendar.modifyItem(newItem, oldItem);
+            return convertItem(modifiedItem, updateProperties, context.extension);
+          },
+          move: async function(fromCalendarId, id, toCalendarId) {
+            if (fromCalendarId == toCalendarId) {
+              return;
+            }
+
+            let fromCalendar = cal.manager.getCalendarById(fromCalendarId);
+            let toCalendar = cal.manager.getCalendarById(toCalendarId);
+            let item = await fromCalendar.getItem(id);
+
+            if (!item) {
+              throw new ExtensionError("Could not find item " + id);
+            }
+
+            if (isOwnCalendar(toCalendar, context.extension) && isOwnCalendar(fromCalendar, context.extension)) {
+              // TODO doing this first, the item may not be in the db and it will fail. Doing this
+              // after addItem, the metadata will not be available for the onCreated listener
+              let fromCache = getCachedCalendar(fromCalendar);
+              let toCache = getCachedCalendar(toCalendar);
+              toCache.setMetaData(item.id, fromCache.getMetaData(item.id));
+            }
+            await toCalendar.addItem(item);
+            await fromCalendar.deleteItem(item);
+          },
+          remove: async function(calendarId, id) {
+            let calendar = getResolvedCalendarById(context.extension, calendarId);
+            let item = await calendar.getItem(id);
+            if (!item) {
+              throw new ExtensionError("Could not find item " + id);
+            }
+            await calendar.deleteItem(item);
+          },
+
+          onCreated: new EventManager({
+            context,
+            name: "calendar.items.onCreated",
+            register: (fire, options) => {
+              let observer = cal.createAdapter(Ci.calIObserver, {
+                onAddItem: item => {
+                  fire.sync(convertItem(item, options, context.extension));
+                },
+              });
+
+              cal.manager.addCalendarObserver(observer);
+              return () => {
+                cal.manager.removeCalendarObserver(observer);
+              };
+            },
+          }).api(),
+
+          onUpdated: new EventManager({
+            context,
+            name: "calendar.items.onUpdated",
+            register: (fire, options) => {
+              let observer = cal.createAdapter(Ci.calIObserver, {
+                onModifyItem: (newItem, oldItem) => {
+                  // TODO calculate changeInfo
+                  let changeInfo = {};
+                  fire.sync(convertItem(newItem, options, context.extension), changeInfo);
+                },
+              });
+
+              cal.manager.addCalendarObserver(observer);
+              return () => {
+                cal.manager.removeCalendarObserver(observer);
+              };
+            },
+          }).api(),
+
+          onRemoved: new EventManager({
+            context,
+            name: "calendar.items.onRemoved",
+            register: fire => {
+              let observer = cal.createAdapter(Ci.calIObserver, {
+                onDeleteItem: item => {
+                  fire.sync(item.calendar.id, item.id);
+                },
+              });
+
+              cal.manager.addCalendarObserver(observer);
+              return () => {
+                cal.manager.removeCalendarObserver(observer);
+              };
+            },
+          }).api(),
+
+          onAlarm: new EventManager({
+            context,
+            name: "calendar.items.onAlarm",
+            register: (fire, options) => {
+              let observer = {
+                QueryInterface: ChromeUtils.generateQI(["calIAlarmServiceObserver"]),
+                onAlarm(item, alarm) {
+                  fire.sync(convertItem(item, options, context.extension), convertAlarm(item, alarm));
+                },
+                onRemoveAlarmsByItem(item) {},
+                onRemoveAlarmsByCalendar(calendar) {},
+                onAlarmsLoaded(calendar) {},
+              };
+
+              let alarmsvc = Cc["@mozilla.org/calendar/alarm-service;1"].getService(
+                Ci.calIAlarmService
+              );
+
+              alarmsvc.addObserver(observer);
+              return () => {
+                alarmsvc.removeObserver(observer);
+              };
+            },
+          }).api(),
+        },
+      },
+    };
+  }
+};

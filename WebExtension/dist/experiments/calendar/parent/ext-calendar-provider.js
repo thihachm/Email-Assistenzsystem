@@ -1,1 +1,635 @@
-var{ExtensionCommon}=ChromeUtils.import("resource://gre/modules/ExtensionCommon.jsm"),{Services}=ChromeUtils.import("resource://gre/modules/Services.jsm"),{cal}=ChromeUtils.import("resource:///modules/calendar/calUtils.jsm"),{ExtensionAPI,EventManager}=ExtensionCommon;function convertProps(e,t){let r=new ExtCalendar(t);return r.setProperty("name",e.name),r.setProperty("readOnly",e.readOnly),r.setProperty("disabled",!1===e.enabled),r.setProperty("color",e.color||"#A8C2E1"),r.uri=Services.io.newURI(e.url),r}ChromeUtils.defineModuleGetter(this,"ExtensionSupport","resource:///modules/ExtensionSupport.jsm");class ExtCalendarProvider{QueryInterface=ChromeUtils.generateQI(["calICalendarProvider"]);static register(e){let t=cal.manager,r="ext-"+e.id;t.registerCalendarProvider(r,class extends ExtCalendar{constructor(){super(e)}});let i=new ExtCalendarProvider(e);cal.provider.register(i)}static unregister(e){let t=cal.manager,r="ext-"+e.id;t.unregisterCalendarProvider(r,!0),cal.provider.unregister(r)}_cachedAdoptItemCallback=null;_cachedModifyItemCallback=null;constructor(e){this.extension=e}get type(){return"ext-"+this.extension.id}get displayName(){return this.extension.localize(this.extension.manifest.calendar_provider.name)}createCalendar(){throw new Error("Not implemented",Cr.NS_ERROR_NOT_IMPLEMENTED)}deleteCalendar(){throw new Error("Not implemented",Cr.NS_ERROR_NOT_IMPLEMENTED)}getCalendar(e){let t=new ExtCalendar(this.extension);return t.uri=e,t}async detectCalendars(e,t,r=null,i=null,a={}){return(await this.extension.emit("calendar.provider.onDetectCalendars",e,t,r,i,a)).reduce(((e,t)=>e.concat(t))).map((e=>convertProps(e,this.extension)))}}class ExtCalendar extends cal.provider.BaseClass{QueryInterface=ChromeUtils.generateQI(["calICalendar","calIChangeLog","calISchedulingSupport"]);constructor(e){super(),this.initProviderBase(),this.extension=e}get type(){return"ext-"+this.extension.id}get providerID(){return this.extension.id}get capabilities(){return this._capabilities||(this._capabilities=this.extension.manifest.calendar_provider.capabilities||{}),this._capabilities}set capabilities(e){this._capabilities=e}canRefresh=!0;get id(){return super.id}set id(e){super.id=e,this.id&&this.uri&&this.extension.emit("calendar.provider.onInit",this)}get uri(){return super.uri}set uri(e){super.uri=e,this.id&&this.uri&&this.extension.emit("calendar.provider.onInit",this)}setProperty(e,t){"readOnly"===e&&!1===this.capabilities.mutable||super.setProperty(e,t)}getProperty(e){switch(e){case"cache.supported":case"cache.enabled":case"cache.always":return!0;case"organizerId":if(this.capabilities.organizer)return this.capabilities.organizer;break;case"organizerCN":if(this.capabilities.organizerName)return this.capabilities.organizerName;break;case"readOnly":if(!1===this.capabilities.mutable)return!0;break;case"capabilities.timezones.floating.supported":return!(!1===this.capabilities.timezones?.floating);case"capabilities.timezones.UTC.supported":return!(!1===this.capabilities.timezones?.UTC);case"capabilities.attachments.supported":return!(!1===this.capabilities.attachments);case"capabilities.priority.supported":return!(!1===this.capabilities.priority);case"capabilities.privacy.supported":return!(!1===this.capabilities.privacy);case"capabilities.privacy.values":return Array.isArray(this.capabilities.privacy)?this.capabilities.privacy?.map((e=>e.toUpperCase())):["PUBLIC","CONFIDENTIAL","PRIVATE"];case"capabilities.categories.maxCount":return Number.isInteger(this.capabilities.categories?.count)&&this.capabilities.categories.count>=0?this.capabilities.categories?.count:null;case"capabilities.alarms.maxCount":return Number.isInteger(this.capabilities.alarms?.count)?this.capabilities.alarms?.count:void 0;case"capabilities.alarms.actionValues":return this.capabilities.alarms?.actions?.map((e=>e.toUpperCase()))||["DISPLAY"];case"capabilities.tasks.supported":return!(!1===this.capabilities.tasks);case"capabilities.events.supported":return!(!1===this.capabilities.events);case"capabilities.removeModes":return Array.isArray(this.capabilities.remove_modes)?this.capabilities.remove_modes:["unsubscribe"];case"requiresNetwork":return!(!1===this.capabilities.requires_network)}return super.getProperty(e)}async addItem(e){return this.adoptItem(e.clone())}async adoptItem(e){try{let t=await this.extension.emit("calendar.provider.onItemCreated",this,e),{item:r,metadata:i}=t.find((e=>e.item))||{};if(!r)throw new Components.Exception("Did not receive item from extension",Cr.NS_ERROR_FAILURE);return i&&this.offlineStorage.setMetaData(r.id,JSON.stringify(i)),e.id&&r.id!=e.id&&await this.deleteItem(e),r.calendar||(r.calendar=this.superCalendar),this.observers.notify("onAddItem",[r]),this._cachedAdoptItemCallback&&await this._cachedAdoptItemCallback(this.superCalendar,Cr.NS_OK,Ci.calIOperationListener.ADD,r.id,r),r}catch(t){throw this._cachedAdoptItemCallback&&await this._cachedAdoptItemCallback(this.superCalendar,t.result||Cr.NS_ERROR_FAILURE,Ci.calIOperationListener.ADD,e.id,e),t}}async modifyItem(e,t){try{let r=await this.extension.emit("calendar.provider.onItemUpdated",this,e,t),{item:i,metadata:a}=r.find((e=>e.item))||{};if(!i)throw new Components.Exception("Did not receive item from extension",Cr.NS_ERROR_FAILURE);return a&&this.offlineStorage.setMetaData(i.id,JSON.stringify(a)),i.calendar||(i.calendar=this.superCalendar),this.observers.notify("onModifyItem",[i,t]),this._cachedModifyItemCallback&&await this._cachedModifyItemCallback(this.superCalendar,Cr.NS_OK,Ci.calIOperationListener.MODIFY,i.id,i),i}catch(t){throw this._cachedModifyItemCallback&&await this._cachedModifyItemCallback(this.superCalendar,t.result||Cr.NS_ERROR_FAILURE,Ci.calIOperationListener.MODIFY,e.id,e),t}}async deleteItem(e,t){if(!(await this.extension.emit("calendar.provider.onItemRemoved",this,e)).length)throw new Components.Exception("Extension did not consume item deletion",Cr.NS_ERROR_FAILURE);this.observers.notify("onDeleteItem",[e])}getItem(e){return this.offlineStorage.getItem(...arguments)}getItems(e,t,r,i){return this.offlineStorage.getItems(...arguments)}refresh(){this.mObservers.notify("onLoad",[this])}resetLog(){this.extension.emit("calendar.provider.onResetSync",this).then((()=>{this.mObservers.notify("onLoad",[this])}))}async replayChangesOn(e){this.offlineStorage.startBatch();try{await this.extension.emit("calendar.provider.onSync",this),e.onResult({status:Cr.NS_OK},null)}catch(t){console.error(t),e.onResult({status:t.result||Cr.NS_ERROR_FAILURE},t.message||t)}finally{this.offlineStorage.endBatch()}}}class ExtFreeBusyProvider{QueryInterface=ChromeUtils.generateQI(["calIFreeBusyProvider"]);constructor(e){this.fire=e}async getFreeBusyIntervals(e,t,r,i,a){try{const n={free:Ci.calIFreeBusyInterval.FREE,busy:Ci.calIFreeBusyInterval.BUSY,unavailable:Ci.calIFreeBusyInterval.BUSY_UNAVAILABLE,tentative:Ci.calIFreeBusyInterval.BUSY_TENTATIVE};let s=e.replace(/^mailto:/,""),o=t.icalString,l=r.icalString,c=["free","busy","unavailable","tentative"].filter(((e,t)=>i&1<<t)),d=await this.fire.async({attendee:s,start:o,end:l,types:c});a.onResult({status:Cr.NS_OK},d.map((t=>new cal.provider.FreeBusyInterval(e,n[t.type],cal.createDateTime(t.start),cal.createDateTime(t.end)))))}catch(e){console.error(e),a.onResult({status:e.result||Cr.NS_ERROR_FAILURE},e.message||e)}}}this.calendar_provider=class extends ExtensionAPI{onStartup(){this.extension.manifest.calendar_provider&&this.onManifestEntry("calendar_provider"),Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler).setSubstitution("experiment-calendar",this.extension.rootURI);const{setupE10sBrowser:e}=ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");ChromeUtils.registerWindowActor("CalendarProvider",{child:{moduleURI:"resource://experiment-calendar/experiments/calendar/child/ext-calendar-provider-actor.jsm"}}),ExtensionSupport.registerWindowListener("ext-calendar-provider-"+this.extension.id,{chromeURLs:["chrome://calendar/content/calendar-creation.xhtml"],onLoadWindow:t=>{let r=this.extension.manifest.calendar_provider;r.creation_panel&&(t.setUpAddonCalendarSettingsPanel=r=>{let i=t.document.getElementById("panel-addon-calendar-settings");i.setAttribute("flex","1");let a=i.lastElementChild,n=Promise.resolve();a||(a=t.document.createXULElement("browser"),a.setAttribute("transparent","true"),a.setAttribute("flex","1"),n=e(this.extension,a,i,{maxWidth:void 0,maxHeight:void 0,allowScriptsToClose:!1})),n.then((()=>{a.loadURI(r.panelSrc,{triggeringPrincipal:this.extension.principal})})),t.gButtonHandlers.forNodeId["panel-addon-calendar-settings"].accept=r.onCreated},t.registerCalendarType({label:this.extension.localize(r.name),panelSrc:this.extension.getURL(this.extension.localize(r.creation_panel)),onCreated:()=>{t.document.getElementById("panel-addon-calendar-settings").lastElementChild.browsingContext.currentWindowGlobal.getActor("CalendarProvider").sendAsyncMessage("postMessage",{message:"create",origin:this.extension.getURL("")})}}))}})}onShutdown(e){e||(ExtensionSupport.unregisterWindowListener("ext-calendar-provider-"+this.extension.id),ChromeUtils.unregisterWindowActor("CalendarProvider"),this.extension.manifest.calendar_provider&&ExtCalendarProvider.unregister(this.extension),Cu.unload("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm"),Services.io.getProtocolHandler("resource").QueryInterface(Ci.nsIResProtocolHandler).setSubstitution("experiment-calendar",null),Services.obs.notifyObservers(null,"startupcache-invalidate",null))}onManifestEntry(e){if("calendar_provider"!=e)return;let t=this.extension.manifest;t.browser_specific_settings?.gecko?.id||t.applications?.gecko?.id||console.warn("Registering a calendar provider with a temporary id. Calendars created for this provider won't persist restarts"),this.extension.on("background-script-started",(()=>{ExtCalendarProvider.register(this.extension);let e=new ExtCalendarProvider(this.extension);cal.provider.register(e)}))}getAPI(e){const{propsToItem:t,convertItem:r,convertCalendar:i}=ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");return{calendar:{provider:{onItemCreated:new EventManager({context:e,name:"calendar.provider.onItemCreated",register:(a,n)=>{let s=async(s,o,l)=>{let c=await a.async(i(e.extension,o),r(l,n,e.extension));return c?.type&&(l=t(c,l)),l.id||(l.id=cal.getUUID()),{item:l,metadata:c?.metadata}};return e.extension.on("calendar.provider.onItemCreated",s),()=>{e.extension.off("calendar.provider.onItemCreated",s)}}}).api(),onItemUpdated:new EventManager({context:e,name:"calendar.provider.onItemUpdated",register:(a,n)=>{let s=async(s,o,l,c)=>{let d=await a.async(i(e.extension,o),r(l,n,e.extension),r(c,n,e.extension));return d?.type&&(l=t(d,l)),{item:l,metadata:d?.metadata}};return e.extension.on("calendar.provider.onItemUpdated",s),()=>{e.extension.off("calendar.provider.onItemUpdated",s)}}}).api(),onItemRemoved:new EventManager({context:e,name:"calendar.provider.onItemRemoved",register:(t,a)=>{let n=(n,s,o)=>t.async(i(e.extension,s),r(o,a,e.extension));return e.extension.on("calendar.provider.onItemRemoved",n),()=>{e.extension.off("calendar.provider.onItemRemoved",n)}}}).api(),onInit:new EventManager({context:e,name:"calendar.provider.onInit",register:t=>{let r=(r,a)=>t.async(i(e.extension,a));return e.extension.on("calendar.provider.onInit",r),()=>{e.extension.off("calendar.provider.onInit",r)}}}).api(),onSync:new EventManager({context:e,name:"calendar.provider.onSync",register:t=>{let r=(r,a)=>t.async(i(e.extension,a));return e.extension.on("calendar.provider.onSync",r),()=>{e.extension.off("calendar.provider.onSync",r)}}}).api(),onResetSync:new EventManager({context:e,name:"calendar.provider.onResetSync",register:t=>{let r=(r,a)=>t.async(i(e.extension,a));return e.extension.on("calendar.provider.onResetSync",r),()=>{e.extension.off("calendar.provider.onResetSync",r)}}}).api(),onFreeBusy:new EventManager({context:e,name:"calendar.provider.onFreeBusy",register:e=>{let t=new ExtFreeBusyProvider(e);return cal.freeBusyService.addProvider(t),()=>{cal.freeBusyService.removeProvider(t)}}}).api(),onDetectCalendars:new EventManager({context:e,name:"calendar.provider.onDetectCalendars",register:t=>{let r=(e,r,i,a,n,s)=>t.async(r,i,a,n,s);return e.extension.on("calendar.provider.onDetectCalendars",r),()=>{e.extension.off("calendar.provider.onDetectCalendars",r)}}}).api()}}}}};
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+var { ExtensionCommon } = ChromeUtils.import("resource://gre/modules/ExtensionCommon.jsm");
+var { Services } = ChromeUtils.import("resource://gre/modules/Services.jsm");
+var { cal } = ChromeUtils.import("resource:///modules/calendar/calUtils.jsm");
+
+var { ExtensionAPI, EventManager } = ExtensionCommon;
+
+ChromeUtils.defineModuleGetter(
+  this,
+  "ExtensionSupport",
+  "resource:///modules/ExtensionSupport.jsm",
+);
+
+function convertProps(props, extension) {
+  let calendar = new ExtCalendar(extension);
+  calendar.setProperty("name", props.name);
+  calendar.setProperty("readOnly", props.readOnly);
+  calendar.setProperty("disabled", props.enabled === false);
+  calendar.setProperty("color", props.color || "#A8C2E1");
+
+  calendar.uri = Services.io.newURI(props.url);
+
+  return calendar;
+}
+
+class ExtCalendarProvider {
+  QueryInterface = ChromeUtils.generateQI(["calICalendarProvider"]);
+
+  static register(extension) {
+    let calmgr = cal.manager;
+    let type = "ext-" + extension.id;
+
+    calmgr.registerCalendarProvider(
+      type,
+      class extends ExtCalendar {
+        constructor() {
+          super(extension);
+        }
+      }
+    );
+
+    let provider = new ExtCalendarProvider(extension);
+    cal.provider.register(provider);
+  }
+
+  static unregister(extension) {
+    let calmgr = cal.manager;
+    let type = "ext-" + extension.id;
+    calmgr.unregisterCalendarProvider(type, true);
+    cal.provider.unregister(type);
+  }
+
+  _cachedAdoptItemCallback = null;
+  _cachedModifyItemCallback = null;
+
+  constructor(extension) {
+    this.extension = extension;
+  }
+
+  get type() {
+    return "ext-" + this.extension.id;
+  }
+
+  get displayName() {
+    // TODO the localize call is only necessary in the experiment
+    return this.extension.localize(this.extension.manifest.calendar_provider.name);
+  }
+
+  createCalendar() {
+    throw new Error("Not implemented", Cr.NS_ERROR_NOT_IMPLEMENTED);
+  }
+  deleteCalendar() {
+    throw new Error("Not implemented", Cr.NS_ERROR_NOT_IMPLEMENTED);
+  }
+
+  getCalendar(url) {
+    let calendar = new ExtCalendar(this.extension);
+    calendar.uri = url;
+    return calendar;
+  }
+
+  async detectCalendars(username, password, location=null, savePassword=null, extraProperties={}) {
+    let detectionResponses = await this.extension.emit("calendar.provider.onDetectCalendars", username, password, location, savePassword, extraProperties);
+    return detectionResponses.reduce((allCalendars, calendars) => allCalendars.concat(calendars)).map(props => convertProps(props, this.extension));
+  }
+}
+
+class ExtCalendar extends cal.provider.BaseClass {
+  QueryInterface = ChromeUtils.generateQI(["calICalendar", "calIChangeLog", "calISchedulingSupport"]);
+
+  constructor(extension) {
+    super();
+    this.initProviderBase();
+    this.extension = extension;
+  }
+
+  get type() {
+    return "ext-" + this.extension.id;
+  }
+
+  get providerID() {
+    return this.extension.id;
+  }
+
+  get capabilities() {
+    if (!this._capabilities) {
+      this._capabilities = this.extension.manifest.calendar_provider.capabilities || {};
+    }
+    return this._capabilities;
+  }
+  set capabilities(val) {
+    this._capabilities = val;
+  }
+
+  canRefresh = true;
+
+  get id() {
+    return super.id;
+  }
+  set id(val) {
+    super.id = val;
+    if (this.id && this.uri) {
+      this.extension.emit("calendar.provider.onInit", this);
+    }
+  }
+  get uri() {
+    return super.uri;
+  }
+  set uri(val) {
+    super.uri = val;
+    if (this.id && this.uri) {
+      this.extension.emit("calendar.provider.onInit", this);
+    }
+  }
+
+  setProperty(name, value) {
+    if (name === "readOnly" && this.capabilities.mutable === false) {
+      return; // prevent change
+    }
+    super.setProperty(name, value);
+  }
+
+  getProperty(name) {
+    switch (name) {
+      case "cache.supported":
+      case "cache.enabled":
+      case "cache.always":
+        return true;
+
+      case "organizerId":
+        if (this.capabilities.organizer) {
+          return this.capabilities.organizer;
+        }
+        break;
+      case "organizerCN":
+        if (this.capabilities.organizerName) {
+          return this.capabilities.organizerName;
+        }
+        break;
+
+
+      case "readOnly":
+        if (this.capabilities.mutable === false) {
+          return true;
+        }
+        break;
+
+      case "capabilities.timezones.floating.supported":
+        return !(this.capabilities.timezones?.floating === false);
+      case "capabilities.timezones.UTC.supported":
+        return !(this.capabilities.timezones?.UTC === false);
+      case "capabilities.attachments.supported":
+        return !(this.capabilities.attachments === false);
+      case "capabilities.priority.supported":
+        return !(this.capabilities.priority === false);
+      case "capabilities.privacy.supported":
+        return !(this.capabilities.privacy === false);
+      case "capabilities.privacy.values":
+        return Array.isArray(this.capabilities.privacy)
+          ? this.capabilities.privacy?.map(val => val.toUpperCase())
+          : ["PUBLIC", "CONFIDENTIAL", "PRIVATE"];
+      case "capabilities.categories.maxCount":
+        return Number.isInteger(this.capabilities.categories?.count) &&
+          this.capabilities.categories.count >= 0
+          ? this.capabilities.categories?.count
+          : null;
+      case "capabilities.alarms.maxCount":
+        return Number.isInteger(this.capabilities.alarms?.count)
+          ? this.capabilities.alarms?.count
+          : undefined;
+      case "capabilities.alarms.actionValues":
+        return this.capabilities.alarms?.actions?.map(val => val.toUpperCase()) || ["DISPLAY"];
+      case "capabilities.tasks.supported":
+        return !(this.capabilities.tasks === false);
+      case "capabilities.events.supported":
+        return !(this.capabilities.events === false);
+      case "capabilities.removeModes":
+        return Array.isArray(this.capabilities.remove_modes)
+          ? this.capabilities.remove_modes
+          : ["unsubscribe"];
+      case "requiresNetwork":
+        return !(this.capabilities.requires_network === false);
+    }
+
+    return super.getProperty(name);
+  }
+
+  async addItem(aItem) {
+    return this.adoptItem(aItem.clone());
+  }
+  async adoptItem(aItem) {
+    try {
+      let items = await this.extension.emit("calendar.provider.onItemCreated", this, aItem);
+      let { item, metadata } = items.find(props => props.item) || {};
+      if (!item) {
+        throw new Components.Exception("Did not receive item from extension", Cr.NS_ERROR_FAILURE);
+      }
+
+      if (metadata) {
+        this.offlineStorage.setMetaData(item.id, JSON.stringify(metadata));
+      }
+
+      if (aItem.id && item.id != aItem.id) {
+        // The ID of the item has changed. We'll have to make sure that whatever old item is in the
+        // cache is removed.
+        // TODO Test this well or risk data loss
+        await this.deleteItem(aItem);
+      }
+
+      if (!item.calendar) {
+        item.calendar = this.superCalendar;
+      }
+      this.observers.notify("onAddItem", [item]);
+      if (this._cachedAdoptItemCallback) {
+        await this._cachedAdoptItemCallback(
+          this.superCalendar,
+          Cr.NS_OK,
+          Ci.calIOperationListener.ADD,
+          item.id,
+          item
+        );
+      }
+      return item;
+    } catch (e) {
+      if (this._cachedAdoptItemCallback) {
+        await this._cachedAdoptItemCallback(
+          this.superCalendar,
+          e.result || Cr.NS_ERROR_FAILURE,
+          Ci.calIOperationListener.ADD,
+          aItem.id,
+          aItem
+        );
+      }
+      throw e;
+    }
+  }
+
+  async modifyItem(aNewItem, aOldItem) {
+    try {
+      let items = await this.extension.emit(
+        "calendar.provider.onItemUpdated",
+        this,
+        aNewItem,
+        aOldItem
+      );
+      let { item, metadata } = items.find(props => props.item) || {};
+      if (!item) {
+        throw new Components.Exception("Did not receive item from extension", Cr.NS_ERROR_FAILURE);
+      }
+
+      if (metadata) {
+        this.offlineStorage.setMetaData(item.id, JSON.stringify(metadata));
+      }
+
+      if (!item.calendar) {
+        item.calendar = this.superCalendar;
+      }
+      this.observers.notify("onModifyItem", [item, aOldItem]);
+      if (this._cachedModifyItemCallback) {
+        await this._cachedModifyItemCallback(
+          this.superCalendar,
+          Cr.NS_OK,
+          Ci.calIOperationListener.MODIFY,
+          item.id,
+          item
+        );
+      }
+      return item;
+    } catch (e) {
+      if (this._cachedModifyItemCallback) {
+        await this._cachedModifyItemCallback(
+          this.superCalendar,
+          e.result || Cr.NS_ERROR_FAILURE,
+          Ci.calIOperationListener.MODIFY,
+          aNewItem.id,
+          aNewItem
+        );
+      }
+      throw e;
+    }
+  }
+
+  async deleteItem(aItem, aListener) {
+    let results = await this.extension.emit("calendar.provider.onItemRemoved", this, aItem);
+    if (!results.length) {
+      throw new Components.Exception(
+        "Extension did not consume item deletion",
+        Cr.NS_ERROR_FAILURE
+      );
+    }
+
+    this.observers.notify("onDeleteItem", [aItem]);
+  }
+
+  getItem(aId) {
+    return this.offlineStorage.getItem(...arguments);
+  }
+
+  getItems(aFilter, aCount, aRangeStart, aRangeEnd) {
+    return this.offlineStorage.getItems(...arguments);
+  }
+
+  refresh() {
+    this.mObservers.notify("onLoad", [this]);
+  }
+
+  resetLog() {
+    // TODO may need to make this .finally()
+    this.extension.emit("calendar.provider.onResetSync", this).then(() => {
+      this.mObservers.notify("onLoad", [this]);
+    });
+  }
+
+  async replayChangesOn(aListener) {
+    this.offlineStorage.startBatch();
+    try {
+      await this.extension.emit("calendar.provider.onSync", this);
+      aListener.onResult({ status: Cr.NS_OK }, null);
+    } catch (e) {
+      console.error(e);
+      aListener.onResult({ status: e.result || Cr.NS_ERROR_FAILURE }, e.message || e);
+    } finally {
+      this.offlineStorage.endBatch();
+    }
+  }
+}
+
+class ExtFreeBusyProvider {
+  QueryInterface = ChromeUtils.generateQI(["calIFreeBusyProvider"]);
+
+  constructor(fire) {
+    this.fire = fire;
+  }
+
+  async getFreeBusyIntervals(aCalId, aRangeStart, aRangeEnd, aBusyTypes, aListener) {
+    try {
+      const TYPE_MAP = {
+        free: Ci.calIFreeBusyInterval.FREE,
+        busy: Ci.calIFreeBusyInterval.BUSY,
+        unavailable: Ci.calIFreeBusyInterval.BUSY_UNAVAILABLE,
+        tentative: Ci.calIFreeBusyInterval.BUSY_TENTATIVE,
+      };
+      let attendee = aCalId.replace(/^mailto:/, "");
+      let start = aRangeStart.icalString;
+      let end = aRangeEnd.icalString;
+      let types = ["free", "busy", "unavailable", "tentative"].filter((type, index) => aBusyTypes & (1 << index));
+      let results = await this.fire.async({ attendee, start, end, types });
+      aListener.onResult({ status: Cr.NS_OK }, results.map(interval =>
+        new cal.provider.FreeBusyInterval(aCalId,
+          TYPE_MAP[interval.type],
+          cal.createDateTime(interval.start),
+          cal.createDateTime(interval.end))));
+    } catch (e) {
+      console.error(e);
+      aListener.onResult({ status: e.result || Cr.NS_ERROR_FAILURE }, e.message || e);
+    }
+  }
+}
+
+this.calendar_provider = class extends ExtensionAPI {
+  onStartup() {
+    if (this.extension.manifest.calendar_provider) {
+      this.onManifestEntry("calendar_provider");
+    }
+
+    // TODO Change this for your add-on to avoid conflicts
+    Services.io
+      .getProtocolHandler("resource")
+      .QueryInterface(Ci.nsIResProtocolHandler)
+      .setSubstitution("experiment-calendar", this.extension.rootURI);
+
+    const { setupE10sBrowser } = ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");
+
+    ChromeUtils.registerWindowActor("CalendarProvider", { child: { moduleURI: "resource://experiment-calendar/experiments/calendar/child/ext-calendar-provider-actor.jsm" } });
+
+    ExtensionSupport.registerWindowListener("ext-calendar-provider-" + this.extension.id, {
+      chromeURLs: ["chrome://calendar/content/calendar-creation.xhtml"],
+      onLoadWindow: (win) => {
+        let provider = this.extension.manifest.calendar_provider;
+        if (provider.creation_panel) {
+          // Do our own browser setup to avoid a bug
+          win.setUpAddonCalendarSettingsPanel = (calendarType) => {
+            let panel = win.document.getElementById("panel-addon-calendar-settings");
+            panel.setAttribute("flex", "1");
+
+            let browser = panel.lastElementChild;
+            let loadPromise = Promise.resolve();
+            if (!browser) {
+              browser = win.document.createXULElement("browser");
+              browser.setAttribute("transparent", "true");
+              browser.setAttribute("flex", "1");
+              loadPromise = setupE10sBrowser(this.extension, browser, panel, { maxWidth: undefined, maxHeight: undefined, allowScriptsToClose: false });
+            }
+
+            loadPromise.then(() => {
+              browser.loadURI(calendarType.panelSrc, { triggeringPrincipal: this.extension.principal });
+            });
+
+            win.gButtonHandlers.forNodeId["panel-addon-calendar-settings"].accept = calendarType.onCreated;
+          };
+
+          win.registerCalendarType({
+            label: this.extension.localize(provider.name),
+            panelSrc: this.extension.getURL(this.extension.localize(provider.creation_panel)),
+            onCreated: () => {
+              // TODO temporary
+              let browser = win.document.getElementById("panel-addon-calendar-settings").lastElementChild;
+              let actor = browser.browsingContext.currentWindowGlobal.getActor("CalendarProvider");
+              actor.sendAsyncMessage("postMessage", { message: "create", origin: this.extension.getURL("") });
+            }
+          });
+        }
+      }
+    });
+  }
+  onShutdown(isAppShutdown) {
+    if (isAppShutdown) {
+      return;
+    }
+    ExtensionSupport.unregisterWindowListener("ext-calendar-provider-" + this.extension.id);
+    ChromeUtils.unregisterWindowActor("CalendarProvider");
+
+    if (this.extension.manifest.calendar_provider) {
+      ExtCalendarProvider.unregister(this.extension);
+    }
+
+    Cu.unload("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");
+
+    Services.io
+      .getProtocolHandler("resource")
+      .QueryInterface(Ci.nsIResProtocolHandler)
+      .setSubstitution("experiment-calendar", null);
+
+    Services.obs.notifyObservers(null, "startupcache-invalidate", null);
+  }
+
+  onManifestEntry(entryName) {
+    if (entryName != "calendar_provider") {
+      return;
+    }
+    let manifest = this.extension.manifest;
+
+    if (!manifest.browser_specific_settings?.gecko?.id && !manifest.applications?.gecko?.id) {
+      console.warn(
+        "Registering a calendar provider with a temporary id. Calendars created for this provider won't persist restarts"
+      );
+    }
+
+    // Defer registering the provider until the background page has started. We want the first set
+    // of listeners to be connected before we initialize.
+    // TODO this works, but if there is an async IIFE then that doesn't have the provider registered
+    // yet.
+    this.extension.on("background-script-started", () => {
+      ExtCalendarProvider.register(this.extension);
+      let provider = new ExtCalendarProvider(this.extension);
+      cal.provider.register(provider);
+    });
+  }
+
+  getAPI(context) {
+    const {
+      propsToItem,
+      convertItem,
+      convertCalendar,
+    } = ChromeUtils.import("resource://experiment-calendar/experiments/calendar/ext-calendar-utils.jsm");
+
+    return {
+      calendar: {
+        provider: {
+          onItemCreated: new EventManager({
+            context,
+            name: "calendar.provider.onItemCreated",
+            register: (fire, options) => {
+              let listener = async (event, calendar, item) => {
+                let props = await fire.async(
+                  convertCalendar(context.extension, calendar),
+                  convertItem(item, options, context.extension)
+                );
+                if (props?.type) {
+                  item = propsToItem(props, item);
+                }
+                if (!item.id) {
+                  item.id = cal.getUUID();
+                }
+                return { item, metadata: props?.metadata };
+              };
+
+              context.extension.on("calendar.provider.onItemCreated", listener);
+              return () => {
+                context.extension.off("calendar.provider.onItemCreated", listener);
+              };
+            },
+          }).api(),
+
+          onItemUpdated: new EventManager({
+            context,
+            name: "calendar.provider.onItemUpdated",
+            register: (fire, options) => {
+              let listener = async (event, calendar, item, oldItem) => {
+                let props = await fire.async(
+                  convertCalendar(context.extension, calendar),
+                  convertItem(item, options, context.extension),
+                  convertItem(oldItem, options, context.extension)
+                );
+                if (props?.type) {
+                  item = propsToItem(props, item);
+                }
+                return { item, metadata: props?.metadata };
+              };
+
+              context.extension.on("calendar.provider.onItemUpdated", listener);
+              return () => {
+                context.extension.off("calendar.provider.onItemUpdated", listener);
+              };
+            },
+          }).api(),
+
+          onItemRemoved: new EventManager({
+            context,
+            name: "calendar.provider.onItemRemoved",
+            register: (fire, options) => {
+              let listener = (event, calendar, item) => {
+                return fire.async(
+                  convertCalendar(context.extension, calendar),
+                  convertItem(item, options, context.extension)
+                );
+              };
+
+              context.extension.on("calendar.provider.onItemRemoved", listener);
+              return () => {
+                context.extension.off("calendar.provider.onItemRemoved", listener);
+              };
+            },
+          }).api(),
+
+          onInit: new EventManager({
+            context,
+            name: "calendar.provider.onInit",
+            register: fire => {
+              let listener = (event, calendar) => {
+                return fire.async(convertCalendar(context.extension, calendar));
+              };
+
+              context.extension.on("calendar.provider.onInit", listener);
+              return () => {
+                context.extension.off("calendar.provider.onInit", listener);
+              };
+            },
+          }).api(),
+
+          onSync: new EventManager({
+            context,
+            name: "calendar.provider.onSync",
+            register: fire => {
+              let listener = (event, calendar) => {
+                return fire.async(convertCalendar(context.extension, calendar));
+              };
+
+              context.extension.on("calendar.provider.onSync", listener);
+              return () => {
+                context.extension.off("calendar.provider.onSync", listener);
+              };
+            },
+          }).api(),
+
+          onResetSync: new EventManager({
+            context,
+            name: "calendar.provider.onResetSync",
+            register: fire => {
+              let listener = (event, calendar) => {
+                return fire.async(convertCalendar(context.extension, calendar));
+              };
+
+              context.extension.on("calendar.provider.onResetSync", listener);
+              return () => {
+                context.extension.off("calendar.provider.onResetSync", listener);
+              };
+            },
+          }).api(),
+
+          onFreeBusy: new EventManager({
+            context,
+            name: "calendar.provider.onFreeBusy",
+            register: fire => {
+              let provider = new ExtFreeBusyProvider(fire);
+              cal.freeBusyService.addProvider(provider);
+
+              return () => {
+                cal.freeBusyService.removeProvider(provider);
+              };
+            },
+          }).api(),
+
+          onDetectCalendars: new EventManager({
+            context,
+            name: "calendar.provider.onDetectCalendars",
+            register: fire => {
+              let listener = (event, username, password, location, savePassword, extraProperties) => {
+                return fire.async(username, password, location, savePassword, extraProperties);
+              };
+
+              context.extension.on("calendar.provider.onDetectCalendars", listener);
+              return () => {
+                context.extension.off("calendar.provider.onDetectCalendars", listener);
+              };
+            }
+          }).api(),
+        },
+      },
+    };
+  }
+};
